@@ -121,8 +121,8 @@
       try {
         await auth.signInAnonymously();
         fbUser = auth.currentUser;
+        await pushToFirebaseNow();
         listenFirebase();
-        pushToFirebase();
         return true;
       } catch (e) {
         console.error('Firebase anonymous auth failed:', e);
@@ -150,36 +150,38 @@
       syncStatus = 'ok';
       updateSyncBadge();
     }
+    async function pushToFirebaseNow() {
+      if (!db) return;
+      try {
+        const ops = [];
+        state.employees.forEach(e => {
+          const ref = db.collection('employees').doc(String(e.id));
+          ops.push({ ref, data: { id: e.id, nome: e.nome, matricula: e.matricula, cargo: e.cargo || '', telefone: e.telefone || '', admissao: e.admissao || '', updatedAt: e.updatedAt || new Date().toISOString() } });
+        });
+        state.epis.forEach(p => {
+          const ref = db.collection('epis').doc(String(p.id));
+          ops.push({ ref, data: { id: p.id, nome: p.nome, ca: p.ca, caVal: p.caVal || '', tamanhos: p.tamanhos || ['Único'], estoque: p.estoque || {}, renovacaoDias: p.renovacaoDias || 0, estoqueMin: p.estoqueMin || 0, updatedAt: p.updatedAt || new Date().toISOString() } });
+        });
+        state.entregas.forEach(d => {
+          const ref = db.collection('entregas').doc(d.id);
+          ops.push({ ref, data: d });
+        });
+        for (let i = 0; i < ops.length; i += 500) {
+          const batch = db.batch();
+          ops.slice(i, i + 500).forEach(op => batch.set(op.ref, op.data));
+          await batch.commit();
+        }
+        syncStatus = 'ok';
+        updateSyncBadge();
+      } catch (e) {
+        syncStatus = 'offline';
+        updateSyncBadge();
+      }
+    }
     function pushToFirebase() {
       if (!db) return;
       clearTimeout(_pushTimer);
-      _pushTimer = setTimeout(async () => {
-        try {
-          const ops = [];
-          state.employees.forEach(e => {
-            const ref = db.collection('employees').doc(String(e.id));
-            ops.push({ ref, data: { id: e.id, nome: e.nome, matricula: e.matricula, cargo: e.cargo || '', telefone: e.telefone || '', admissao: e.admissao || '', updatedAt: e.updatedAt || new Date().toISOString() } });
-          });
-          state.epis.forEach(p => {
-            const ref = db.collection('epis').doc(String(p.id));
-            ops.push({ ref, data: { id: p.id, nome: p.nome, ca: p.ca, caVal: p.caVal || '', tamanhos: p.tamanhos || ['Único'], estoque: p.estoque || {}, renovacaoDias: p.renovacaoDias || 0, estoqueMin: p.estoqueMin || 0, updatedAt: p.updatedAt || new Date().toISOString() } });
-          });
-          state.entregas.forEach(d => {
-            const ref = db.collection('entregas').doc(d.id);
-            ops.push({ ref, data: d });
-          });
-          for (let i = 0; i < ops.length; i += 500) {
-            const batch = db.batch();
-            ops.slice(i, i + 500).forEach(op => batch.set(op.ref, op.data));
-            await batch.commit();
-          }
-          syncStatus = 'ok';
-          updateSyncBadge();
-        } catch (e) {
-          syncStatus = 'offline';
-          updateSyncBadge();
-        }
-      }, 300);
+      _pushTimer = setTimeout(() => pushToFirebaseNow(), 300);
     }
     function isAdmin() { return true; }
     async function syncEmpPublic(id) {
