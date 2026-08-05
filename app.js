@@ -122,12 +122,24 @@
         await auth.signInAnonymously();
         fbUser = auth.currentUser;
         await pushToFirebaseNow();
+        await cleanStaleDocs();
         listenFirebase();
         return true;
       } catch (e) {
         console.error('Firebase anonymous auth failed:', e);
         return false;
       }
+    }
+    async function cleanStaleDocs() {
+      if (!db) return;
+      const localIds = new Set(state.employees.map(e => String(e.id)));
+      const snap = await db.collection('employees').get();
+      const batch = db.batch();
+      let count = 0;
+      snap.docs.forEach(d => {
+        if (!localIds.has(d.id)) { batch.delete(d.ref); count++; }
+      });
+      if (count > 0) await batch.commit();
     }
     function listenFirebase() {
       if (_listenersAttached) return;
