@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b1f3a">
   <link rel="manifest" href="manifest.webmanifest">
-  <title>Ficha de EPI · SONDA PROCWORK</title>
+  <title>Ficha de EPI · SondaGuard</title>
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231d4ed8'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='white' font-family='Arial'>🦺</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,6 +14,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -21,13 +25,14 @@
   <div class="app">
     <div class="header">
       <div class="hdr-left">
-        <img id="logo" alt="Sonda" style="height:38px;width:auto;border-radius:4px;">
-        <div class="hdr-text">
-          <div class="hdr-title">SONDA PROCWORK INFORMATICA LTDA.</div>
-          <div class="hdr-sub">Setor Operacional</div>
-        </div>
+        <img id="logo" alt="SondaGuard" style="height:38px;width:auto;border-radius:4px;">
+      </div>
+      <div class="hdr-center">
+        <div class="hdr-title">SondaGuard</div>
+        <div class="hdr-sub">Setor Operacional</div>
       </div>
       <div class="hdr-btns">
+        <span id="syncBadge" class="sync-badge" title="Status de sincronização"></span>
         <button class="icon-btn" onclick="toggleDark()" title="Tema">🌙</button>
       </div>
     </div>
@@ -126,9 +131,13 @@
       <div id="sigSummary"></div>
       <div class="section-title">Assinatura do Colaborador</div>
       <canvas id="signatureCanvas"></canvas>
+      <input type="text" id="sigText1" placeholder="Ou digite seu nome aqui..." oninput="renderSigText(1)"
+        style="margin:6px 0;font-family:'Brush Script MT','Segoe Script',cursive;font-size:20px;">
       <button class="btn btn-secondary small" onclick="clearSigN(1)">🗑 Limpar</button>
       <div class="section-title">Assinatura do Responsável pela Entrega (SESMT)</div>
       <canvas id="signatureCanvas2"></canvas>
+      <input type="text" id="sigText2" placeholder="Ou digite seu nome aqui..." oninput="renderSigText(2)"
+        style="margin:6px 0;font-family:'Brush Script MT','Segoe Script',cursive;font-size:20px;">
       <button class="btn btn-secondary small" onclick="clearSigN(2)">🗑 Limpar</button>
       <button class="btn btn-success" id="btnConfirm" onclick="confirmDelivery()" disabled>✓ CONFIRMAR ENTREGA</button>
     </div>
@@ -181,6 +190,8 @@
       <input type="text" id="fMatricula" placeholder="Matrícula *">
       <input type="text" id="fCargo" placeholder="Cargo">
       <input type="text" id="fTelefone" placeholder="Telefone (opcional)">
+      <label for="fAdmissao" style="font-size:12px;color:var(--gray);margin-bottom:2px;display:block;">Data de
+        Admissão</label>
       <input type="date" id="fAdmissao">
       <button class="btn btn-primary" onclick="saveEmp()">💾 SALVAR</button>
     </div>
@@ -217,21 +228,10 @@
     <div class="modal" style="text-align:center;">
       <h3 style="margin-top:0;">🔳 Ler QR Code</h3>
       <p style="font-size:12px;color:var(--gray);">Aponte para o QR Code do colaborador.</p>
-      <video id="scannerVideo" style="width:100%;border-radius:12px;background:#000;max-height:40vh;" autoplay playsinline muted></video>
+      <video id="scannerVideo" style="width:100%;border-radius:12px;background:#000;max-height:40vh;" autoplay
+        playsinline muted></video>
       <p id="scanStatus" style="font-size:12px;color:var(--gray);margin:8px 0;"></p>
       <button class="btn btn-danger" onclick="stopScan()">Cancelar</button>
-    </div>
-  </div>
-
-  <div class="modal-overlay" id="loginModal">
-    <div class="modal">
-      <h3 style="margin-top:0;">🔒 Acesso ao App</h3>
-      <p style="font-size:12px;color:var(--gray);">Entre com seu usuário e senha.</p>
-      <input type="text" id="loginUser" placeholder="Usuário" autocomplete="username">
-      <div style="height:6px;"></div>
-      <input type="password" id="loginPass" placeholder="Senha" autocomplete="current-password">
-      <div style="height:6px;"></div>
-      <button class="btn btn-primary" onclick="doLogin()">Entrar</button>
     </div>
   </div>
 

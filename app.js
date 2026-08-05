@@ -1,5 +1,5 @@
 // ==================== CONFIGURAÇÃO (essência da ficha) ====================
-    const EMPRESA = 'SONDA PROCWORK INFORMATICA LTDA.';
+    const EMPRESA = 'SondaGuard';
     const SETOR = 'Operacional';
 
     const TERMO = 'Declaro que assumo total responsabilidade pela guarda e conservação do equipamento de proteção individual abaixo descrito, e que recebi orientação sobre o seu uso correto, comprometendo-me a: Utilizá-lo obrigatoriamente durante as minhas atividades na Cia; ser responsável pela sua guarda e conservação; obrigando-me a comunicar ao meu líder imediato qualquer avaria ou dano que o mesmo venha a sofrer; restitui-lo ao setor de EPI, quando solicitado; devolvê-lo ao RH por ocasião do meu desligamento da empresa; responsabilizando-me pelo ressarcimento do valor correspondente, em caso de perda ou extravio; restituição do valor de uso e formação das medidas de segurança e saúde no trabalho, quando determinado; reposição do material, nos casos de utilização e finalidade de uso; a empresa deverá advertir imediatamente o empregado quando determinado que o colaborador assumiu o uso ou a troca.';
@@ -16,21 +16,38 @@
 
     // ==================== ESTADO ====================
     const LS_KEY = 'epi_app_v7';
+    const PEND_KEY = 'epi_pending_v1';
     let state = { employees: [], epis: [], entregas: [], cart: [], cur: {}, sig1: null, sig2: null };
     let counters = { emp: 1, epi: 1 };
+    let syncStatus = 'idle'; // idle | syncing | ok | error | offline
 
-    // ====== Backend (API) ======
-    const USE_API = true;
-    const API_BASE = (location.protocol === 'file:') ? 'http://localhost:3000' : '';
+    // ====== Backend (API) — desabilitado para GitHub Pages + Firebase ======
+    const USE_API = false;
+    const API_BASE = '';
     let curScreen = 'home';
     let _pushTimer = null;
+    let db, auth, fbUser;
+    let _listenersAttached = false;
 
     function load() {
       try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s) state = s; } catch (e) { }
-      if (!localStorage.getItem(LS_KEY)) seed();
+      if (!localStorage.getItem(LS_KEY)) { seed(); save(); }
       recomputeCounters();
     }
-    function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { showToast('⚠️ Armazenamento cheio — exporte um backup (JSON)'); } if (USE_API) pushToServer(); }
+    function loadPending() {
+      try { return JSON.parse(localStorage.getItem(PEND_KEY)) || []; } catch (e) { return []; }
+    }
+    function savePending(p) { try { localStorage.setItem(PEND_KEY, JSON.stringify(p)); } catch (e) { } }
+    function addPending(type, action, data) {
+      const p = loadPending();
+      p.push({ type, action, data, ts: Date.now() });
+      savePending(p);
+      updateSyncBadge();
+    }
+    function save() {
+      try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { showToast('⚠️ Armazenamento cheio — exporte um backup (JSON)'); }
+      if (db) pushToFirebase();
+    }
     function recomputeCounters() {
       counters.emp = state.employees.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
       counters.epi = state.epis.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
@@ -90,89 +107,94 @@
       };
       save();
     }
-    // ==================== BACKEND (API) ====================
-    function apiHeaders(json) {
-      const h = {};
-      if (json) h['Content-Type'] = 'application/json';
-      const t = localStorage.getItem('epi_token');
-      if (t) h['Authorization'] = 'Bearer ' + t;
-      return h;
+    // ==================== FIREBASE ====================
+    function initFirebase() {
+      if (typeof firebase === 'undefined' || !firebaseConfig || firebaseConfig.apiKey === 'COLE_AQUI') {
+        console.warn('Firebase não configurado — usando modo offline');
+        return false;
+      }
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      db = firebase.firestore();
+      return true;
     }
-    async function syncFromServer() {
+    async function connectFirebase() {
+      if (!auth) return false;
       try {
-        const res = await fetch(API_BASE + '/api/sync', { headers: apiHeaders() });
-        if (res.status === 401) { showLogin(); return; }
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data && Array.isArray(data.employees) && Array.isArray(data.epis)) {
-          state.employees = data.employees;
-          state.epis = data.epis;
-          state.entregas = data.entregas || [];
-          state.deletedEmployees = state.deletedEpis = state.deletedEntregas = undefined;
-          recomputeCounters();
-          try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
-          go(curScreen);
-        }
-      } catch (e) { /* servidor offline: mantém cache local */ }
+        await auth.signInAnonymously();
+        fbUser = auth.currentUser;
+        listenFirebase();
+        pushToFirebase();
+        return true;
+      } catch (e) {
+        console.error('Firebase anonymous auth failed:', e);
+        return false;
+      }
     }
-    function pushToServer() {
+    function listenFirebase() {
+      if (_listenersAttached) return;
+      _listenersAttached = true;
+      db.collection('employees').onSnapshot(snap => {
+        state.employees = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+        recomputeCounters();
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+        if (curScreen) go(curScreen);
+      });
+      db.collection('epis').onSnapshot(snap => {
+        state.epis = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+        recomputeCounters();
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+      });
+      db.collection('entregas').onSnapshot(snap => {
+        state.entregas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+      });
+      syncStatus = 'ok';
+      updateSyncBadge();
+    }
+    function pushToFirebase() {
+      if (!db) return;
       clearTimeout(_pushTimer);
       _pushTimer = setTimeout(async () => {
         try {
-          const res = await fetch(API_BASE + '/api/state', {
-            method: 'PUT',
-            headers: apiHeaders(true),
-            body: JSON.stringify({
-              employees: state.employees,
-              epis: state.epis,
-              entregas: state.entregas,
-              deletedEmployees: state.deletedEmployees || [],
-              deletedEpis: state.deletedEpis || [],
-              deletedEntregas: state.deletedEntregas || []
-            })
+          const ops = [];
+          state.employees.forEach(e => {
+            const ref = db.collection('employees').doc(String(e.id));
+            ops.push({ ref, data: { id: e.id, nome: e.nome, matricula: e.matricula, cargo: e.cargo || '', telefone: e.telefone || '', admissao: e.admissao || '', updatedAt: e.updatedAt || new Date().toISOString() } });
           });
-          if (res.status === 401) { showLogin(); return; }
-          if (res.ok) {
-            const data = await res.json();
-            if (data && Array.isArray(data.employees)) {
-              state.employees = data.employees;
-              state.epis = data.epis;
-              state.entregas = data.entregas || [];
-              state.deletedEmployees = state.deletedEpis = state.deletedEntregas = undefined;
-              try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
-            }
+          state.epis.forEach(p => {
+            const ref = db.collection('epis').doc(String(p.id));
+            ops.push({ ref, data: { id: p.id, nome: p.nome, ca: p.ca, caVal: p.caVal || '', tamanhos: p.tamanhos || ['Único'], estoque: p.estoque || {}, renovacaoDias: p.renovacaoDias || 0, estoqueMin: p.estoqueMin || 0, updatedAt: p.updatedAt || new Date().toISOString() } });
+          });
+          state.entregas.forEach(d => {
+            const ref = db.collection('entregas').doc(d.id);
+            ops.push({ ref, data: d });
+          });
+          for (let i = 0; i < ops.length; i += 500) {
+            const batch = db.batch();
+            ops.slice(i, i + 500).forEach(op => batch.set(op.ref, op.data));
+            await batch.commit();
           }
-        } catch (e) { /* offline */ }
-      }, 250);
+          syncStatus = 'ok';
+          updateSyncBadge();
+        } catch (e) {
+          syncStatus = 'offline';
+          updateSyncBadge();
+        }
+      }, 300);
     }
-    function showLogin() { document.getElementById('loginModal').classList.add('show'); }
-    function hideLogin() { document.getElementById('loginModal').classList.remove('show'); }
-    async function doLogin() {
-      const username = document.getElementById('loginUser').value.trim();
-      const password = document.getElementById('loginPass').value;
-      const btn = document.querySelector('#loginModal .btn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Entrando…'; }
-      try {
-        const res = await fetch(API_BASE + '/api/auth/login', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password })
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.token) localStorage.setItem('epi_token', data.token);
-          hideLogin(); showToast('✅ Acesso liberado'); syncFromServer();
-        } else if (res.status === 429) { showToast('⏳ Muitas tentativas. Aguarde alguns minutos.'); }
-        else { showToast('❌ Usuário ou senha incorretos'); }
-      } catch (e) { showToast('❌ Servidor indisponível'); }
-      if (btn) { btn.disabled = false; btn.textContent = 'Entrar'; }
-    }
+    function isAdmin() { return true; }
     async function syncEmpPublic(id) {
+      if (!db) { go('home'); showToast('❌ Firebase não configurado'); return; }
       try {
-        const res = await fetch(API_BASE + '/api/public/employee/' + id);
-        if (!res.ok) { go('home'); showToast('❌ Colaborador não encontrado'); return; }
-        const data = await res.json();
-        if (data.employee) { state.cur.emp = data.employee; state._empPublic = data.entregas || []; go('empview'); }
-      } catch (e) { go('home'); showToast('❌ Servidor indisponível'); }
+        const empDoc = await db.collection('employees').doc(String(id)).get();
+        if (!empDoc.exists) { go('home'); showToast('❌ Colaborador não encontrado'); return; }
+        const emp = { id: Number(empDoc.id), ...empDoc.data() };
+        const entregasSnap = await db.collection('entregas').where('employeeId', '==', Number(id)).get();
+        state.cur.emp = emp;
+        state._empPublic = entregasSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        go('empview');
+      } catch (e) { go('home'); showToast('❌ Erro ao buscar dados'); }
     }
 
     // ==================== UTILS ====================
@@ -197,6 +219,16 @@
       window.scrollTo(0, 0);
     }
     function showToast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(() => t.classList.remove('show'), 3000); }
+    function updateSyncBadge() {
+      const b = document.getElementById('syncBadge');
+      if (!b) return;
+      const pending = loadPending();
+      const map = { idle: '', syncing: '🔄 Sincronizando...', ok: '', error: '⚠️ Erro ao sincronizar', offline: '📡 Offline — dados salvos local' };
+      let txt = map[syncStatus] || '';
+      if (pending.length && syncStatus !== 'syncing') txt = '⏳ ' + pending.length + ' pendente(s)';
+      b.textContent = txt;
+      b.className = 'sync-badge' + (syncStatus === 'error' || syncStatus === 'offline' ? ' sync-warn' : syncStatus === 'ok' && !pending.length ? ' sync-ok' : '');
+    }
     function esc(s) { const d = document.createElement('div'); d.textContent = (s == null ? '' : String(s)); return d.innerHTML; }
     function fmtDate(s) { if (!s) return ''; try { return new Date(s).toLocaleDateString('pt-BR'); } catch (e) { return s; } }
     function fmtDateTime(s) { if (!s) return ''; try { return new Date(s).toLocaleString('pt-BR'); } catch (e) { return s; } }
@@ -257,6 +289,7 @@
     function selectEmp(id) {
       state.cur.emp = state.employees.find(e => e.id === id);
       state.cart = [];
+      state.sig1 = state.sig2 = null;
       go('employee');
     }
 
@@ -399,7 +432,7 @@
     }
 
     // ==================== ASSINATURA ====================
-    const SIZES_CV = { 1: 120, 2: 120 };
+
     function renderSig() {
       const e = state.cur.emp;
       document.getElementById('sigSummary').innerHTML = `
@@ -411,20 +444,33 @@
     <div class="section-title">Resumo</div>
     ${state.cart.map(it => `<div class="item-row" style="font-size:13px;"><span>${it.qty}x ${esc(it.nome)} (${esc(it.tam)})</span><span style="color:var(--gray);">${esc(it.motivo)}</span></div>`).join('')}
     <div class="alert alert-warning" style="font-size:12px;">Assine nos dois campos para confirmar a entrega.</div>`;
-      for (const n of [1, 2]) setupCanvas(n);
-      state.sig1 = state.sig2 = null;
+      for (const n of [1, 2]) {
+        setupCanvas(n);
+        const txtInput = document.getElementById('sigText' + n);
+        if (state['sig' + n]) {
+          const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
+          const img = new Image();
+          img.onload = () => { const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.drawImage(img, 0, 0, c.width / dpr, c.height / dpr); };
+          img.src = state['sig' + n];
+        } else {
+          if (txtInput) txtInput.value = '';
+        }
+      }
       checkConfirm();
     }
     function setupCanvas(n) {
       const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
-      const scale = Math.min(1, 300 / (c.offsetWidth || 400));
-      c.width = Math.round((c.offsetWidth || 400) * scale); c.height = Math.round(SIZES_CV[n] * scale);
-      window.__sigDims = window.__sigDims || {};
-      window.__sigDims[n] = { w: c.width, h: c.height };
-      const ctx = c.getContext('2d'); ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      const rect = c.getBoundingClientRect();
+      const dw = Math.round(rect.width) || 400;
+      const dh = Math.round(rect.height) || 120;
+      const dpr = window.devicePixelRatio || 1;
+      c.width = dw * dpr; c.height = dh * dpr;
+      c.style.width = dw + 'px'; c.style.height = dh + 'px';
+      const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+      ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
       let drawing = false;
       function pos(e) { const r = c.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
-      function start(e) { drawing = true; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); }
+      function start(e) { drawing = true; document.getElementById('sigText' + n).value = ''; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); }
       function move(e) { if (!drawing) return; const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); state['sig' + n] = c.toDataURL(); checkConfirm(); }
       function end() { drawing = false; }
       c.onmousedown = start; c.onmousemove = move; c.onmouseup = end; c.onmouseleave = end;
@@ -432,7 +478,25 @@
       c.ontouchmove = e => { e.preventDefault(); move(e); };
       c.ontouchend = e => { e.preventDefault(); end(); };
     }
-    function clearSigN(n) { const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2')); c.getContext('2d').clearRect(0, 0, c.width, c.height); state['sig' + n] = null; checkConfirm(); }
+    function clearSigN(n) { const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2')); const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.clearRect(0, 0, c.width / dpr, c.height / dpr); state['sig' + n] = null; document.getElementById('sigText' + n).value = ''; checkConfirm(); }
+    function renderSigText(n) {
+      const input = document.getElementById('sigText' + n);
+      const txt = input.value.trim();
+      const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
+      const ctx = c.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const dw = c.width / dpr, dh = c.height / dpr;
+      ctx.clearRect(0, 0, dw, dh);
+      if (!txt) { state['sig' + n] = null; checkConfirm(); return; }
+      const fontSize = Math.max(20, Math.min(48, dw / txt.length * 1.2));
+      ctx.font = fontSize + 'px "Brush Script MT", "Segoe Script", cursive';
+      ctx.fillStyle = '#1e3a8a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, dw / 2, dh / 2);
+      state['sig' + n] = c.toDataURL();
+      checkConfirm();
+    }
     function checkConfirm() { document.getElementById('btnConfirm').disabled = !(state.sig1 && state.sig2); }
 
     function confirmDelivery() {
@@ -463,6 +527,7 @@
       state.entregas.push(delivery);
       state.lastDelivery = delivery;
       state.cart = [];
+      addPending('entrega', 'upsert', { ...delivery });
       save();
       document.getElementById('deliveryId').textContent = 'ID: ' + delivery.id;
       go('success'); showToast('✅ Entrega registrada!');
@@ -473,6 +538,7 @@
     function renderHistory(q) {
       q = (q || '').toLowerCase();
       const list = [...state.entregas].reverse().filter(d => d.employeeName.toLowerCase().includes(q));
+      const admin = isAdmin();
       document.getElementById('histList').innerHTML = list.length ? list.map(d => {
         const totalItens = d.itens.reduce((a, i) => a + i.qty, 0);
         return `
@@ -483,7 +549,10 @@
           <div style="font-size:12px;color:var(--gray);">📅 ${fmtDateTime(d.data)} · ${totalItens} itens</div>
           <div style="font-size:12px;color:var(--gray);">${d.itens.map(i => `${i.qty}x ${esc(i.nome)}`).join(' · ')}</div>
         </div>
-        <button class="btn btn-primary small" onclick="viewDelivery('${d.id}')">📄 Ficha</button>
+        <div style="display:flex;gap:6px;align-items:center;">
+          ${admin ? `<button class="btn btn-danger small" onclick="delEntrega('${d.id}')" title="Excluir">🗑</button>` : ''}
+          <button class="btn btn-primary small" onclick="viewDelivery('${d.id}')">📄 Ficha</button>
+        </div>
       </div>
     </div>`;
       }).join('') : '<p class="empty">Nenhuma entrega registrada</p>';
@@ -492,6 +561,28 @@
     function viewDelivery(id) {
       state.lastDelivery = state.entregas.find(d => d.id === id);
       if (state.lastDelivery) generatePDF();
+    }
+    function delEntrega(id) {
+      if (!isAdmin()) { showToast('❌ Apenas administradores podem excluir entregas'); return; }
+      if (!confirm('Excluir esta entrega? O estoque será devolvido.')) return;
+      const d = state.entregas.find(x => x.id === id);
+      if (d) {
+        const _now = new Date().toISOString();
+        (d.itens || []).forEach(it => {
+          const epi = state.epis.find(x => x.id === it.epiId);
+          if (epi && epi.estoque && epi.estoque[it.tam] !== undefined) {
+            epi.estoque[it.tam] = (epi.estoque[it.tam] || 0) + it.qty;
+            epi.updatedAt = _now;
+          }
+        });
+      }
+      state.entregas = state.entregas.filter(x => x.id !== id);
+      state.deletedEntregas = state.deletedEntregas || [];
+      state.deletedEntregas.push(id);
+      addPending('entrega', 'delete', { id });
+      save();
+      renderHistory('');
+      showToast('🗑 Entrega excluída');
     }
 
     // ==================== EPIs ENTREGUES ====================
@@ -553,7 +644,7 @@
     }
     function clearEmpForm() { ['empId', 'fNome', 'fMatricula', 'fCargo', 'fTelefone'].forEach(k => document.getElementById(k).value = ''); document.getElementById('fAdmissao').value = ''; document.getElementById('empTitle').textContent = '➕ Novo Funcionário'; }
     function editEmp(id) { const e = state.employees.find(x => x.id === id); document.getElementById('empId').value = e.id; document.getElementById('fNome').value = e.nome; document.getElementById('fMatricula').value = e.matricula; document.getElementById('fCargo').value = e.cargo || ''; document.getElementById('fTelefone').value = e.telefone || ''; document.getElementById('fAdmissao').value = e.admissao || ''; document.getElementById('empTitle').textContent = '✏️ Editar'; go('addemp'); }
-    function delEmp(id) { if (confirm('Excluir funcionário?')) { state.deletedEmployees = state.deletedEmployees || []; state.deletedEmployees.push(id); state.employees = state.employees.filter(e => e.id !== id); save(); renderEmps(''); } }
+    function delEmp(id) { if (confirm('Excluir funcionário?')) { state.deletedEmployees = state.deletedEmployees || []; state.deletedEmployees.push(id); state.employees = state.employees.filter(e => e.id !== id); addPending('employee', 'delete', { id }); save(); renderEmps(''); } }
     function saveEmp() {
       const id = document.getElementById('empId').value;
       const nome = document.getElementById('fNome').value.trim(), matricula = document.getElementById('fMatricula').value.trim();
@@ -561,8 +652,10 @@
       const exists = state.employees.find(e => e.matricula === matricula && String(e.id) !== id);
       if (exists) { showToast('⚠️ Matrícula já cadastrada'); return; }
       const data = { nome, matricula, cargo: document.getElementById('fCargo').value.trim() || 'Operacional', telefone: document.getElementById('fTelefone').value.trim(), admissao: document.getElementById('fAdmissao').value, updatedAt: new Date().toISOString() };
-      if (id) { Object.assign(state.employees.find(x => x.id == id), data); }
-      else { state.employees.push({ id: counters.emp++, ...data }); }
+      let emp;
+      if (id) { emp = state.employees.find(x => x.id == id); Object.assign(emp, data); }
+      else { emp = { id: counters.emp++, ...data }; state.employees.push(emp); }
+      addPending('employee', 'upsert', { ...emp });
       save(); go('employees'); renderEmps('');
     }
 
@@ -585,7 +678,7 @@
     }
     function clearEpiForm() { ['epiId', 'eNome', 'eCA', 'eEstoque', 'eRenov'].forEach(k => document.getElementById(k).value = ''); document.getElementById('eCAVal').value = ''; document.getElementById('eTamanhos').value = ''; document.getElementById('epiTitle').textContent = '➕ Novo EPI'; }
     function editEpi(id) { const e = state.epis.find(x => x.id === id); document.getElementById('epiId').value = e.id; document.getElementById('eNome').value = e.nome; document.getElementById('eCA').value = e.ca; document.getElementById('eCAVal').value = e.caVal || ''; document.getElementById('eTamanhos').value = (e.tamanhos || []).join(', '); document.getElementById('eEstoque').value = Object.entries(e.estoque || {}).map(([t, n]) => t + '=' + n).join(', '); document.getElementById('eRenov').value = e.renovacaoDias || ''; document.getElementById('epiTitle').textContent = '✏️ Editar'; go('addepi'); }
-    function delEpi(id) { if (confirm('Excluir EPI?')) { state.deletedEpis = state.deletedEpis || []; state.deletedEpis.push(id); state.epis = state.epis.filter(e => e.id !== id); save(); renderEpiMgmt(''); } }
+    function delEpi(id) { if (confirm('Excluir EPI?')) { state.deletedEpis = state.deletedEpis || []; state.deletedEpis.push(id); state.epis = state.epis.filter(e => e.id !== id); addPending('epi', 'delete', { id }); save(); renderEpiMgmt(''); } }
     function parseEstoque(str) {
       const out = {};
       (str || '').split(',').forEach(p => {
@@ -603,8 +696,10 @@
       const estoque = parseEstoque(document.getElementById('eEstoque').value);
       const renovacaoDias = parseInt(document.getElementById('eRenov').value) || 0;
       const updatedAt = new Date().toISOString();
-      if (id) { const e = state.epis.find(x => x.id == id); e.nome = nome; e.ca = ca; e.caVal = caVal; e.tamanhos = tamanhos; e.estoque = estoque; e.renovacaoDias = renovacaoDias; e.updatedAt = updatedAt; }
-      else { state.epis.push({ id: counters.epi++, nome, ca, caVal, tamanhos, estoque, renovacaoDias, estoqueMin: 0, updatedAt }); }
+      let epi;
+      if (id) { epi = state.epis.find(x => x.id == id); epi.nome = nome; epi.ca = ca; epi.caVal = caVal; epi.tamanhos = tamanhos; epi.estoque = estoque; epi.renovacaoDias = renovacaoDias; epi.updatedAt = updatedAt; }
+      else { epi = { id: counters.epi++, nome, ca, caVal, tamanhos, estoque, renovacaoDias, estoqueMin: 0, updatedAt }; state.epis.push(epi); }
+      addPending('epi', 'upsert', { ...epi });
       save(); go('epis'); renderEpiMgmt('');
     }
 
@@ -745,112 +840,183 @@
     // ==================== PDF ====================
     function generatePDF() {
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
+      const doc = new jsPDF('p', 'mm', 'a4');
       const d = state.lastDelivery;
       if (!d) { showToast('❌ Entrega não encontrada'); return; }
-      const e = d; // employee snapshot dentro da entrega
-      const pw = 210;
-      const HEADER_H = 30;
-      const CONTENT_Y = HEADER_H + 4;
+      const e = d;
+      const pw = 210, ph = 297;
+      const ml = 12, mr = pw - 12;
+      const now = new Date();
+      const dataFmt = String(now.getDate()).padStart(2, '0') + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + now.getFullYear();
 
-      // Cabeçalho azul no topo da página (repetido em cada página nova)
-      function drawHeader() {
-        doc.setFillColor(30, 58, 138); doc.rect(0, 0, pw, HEADER_H, 'F');
-        try { doc.addImage('data:image/png;base64,' + LOGO_B64, 'PNG', 8, 3, 30, 10); } catch (err) { }
-        doc.setTextColor(255, 255, 255); doc.setFontSize(9.5); doc.setFont('helvetica', 'bold');
-        doc.text('FICHA DE CONTROLE DE ENTREGA DE EQUIPAMENTOS DE', pw / 2, 14, { align: 'center' });
-        doc.text('PROTEÇÃO INDIVIDUAL (E.P.I)', pw / 2, 20, { align: 'center' });
+      function drawPageHeader(pageNum, total) {
+        doc.setFillColor(30, 58, 138);
+        doc.rect(0, 0, pw, 22, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+        doc.text('FICHA DE CONTROLE DE EPI', pw / 2, 7, { align: 'center' });
+        doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+        doc.text('SondaGuard', pw / 2, 12, { align: 'center' });
+        doc.setFontSize(6);
+        doc.text('Elaborador: Rafael Almeida', pw / 2, 16.5, { align: 'center' });
+        doc.text('Aprovador: Alica Dayane Araujo Abreu', pw / 2, 20, { align: 'center' });
+        doc.setFontSize(6.5);
+        doc.text('Data: ' + dataFmt, 5, 7);
+        doc.text('Revisão: 02', 5, 11);
+        doc.text('Nº Contrato: 5900123734', 5, 15);
+        doc.setTextColor(0, 0, 0);
       }
 
-      function sigH(n) {
-        const s = window.__sigDims && window.__sigDims[n];
-        const ratio = s && s.w ? s.h / s.w : 0.25;
-        return Math.min(18, 60 * ratio);
+      function drawTerm(y) {
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        doc.text('TERMO DE RESPONSABILIDADE', ml, y); y += 5;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        const termo = 'Declaro para os devidos fins, que ficarei responsável por todos os materiais e equipamentos de proteção individual – E.P.I.s recebidos neste ato pela SondaGuard, bem como fui capacitado e orientado nos procedimentos práticos de utilização e benefícios a minha saúde e integridade física. Portanto obrigo-me a usa-los para a finalidade a que se destinam, responsabilizando-me ainda por sua guarda e conservação, comunicando à empresa qualquer alteração que torne impróprio o seu uso, conforme o que determina a N.R.-6.7.1 da portaria 3214 da CLT. Declaro ainda que, em caso de danos, perda ou extravio, por negligência de minha parte, ficarei obrigado a pagá-los, tendo em vista pertencerem ao patrimônio desta Empresa e terem finalidade única e exclusiva de prestar segurança e bem estar dos funcionários.';
+        let lines = doc.splitTextToSize(termo, pw - 24);
+        doc.text(lines, ml, y); y += lines.length * 3; y += 6;
+        doc.setFontSize(7);
+        doc.text('Assinatura do Funcionário: _______________________________________________', ml, y); y += 8;
+        return y;
       }
 
-      drawHeader();
+      function drawEmployeeInfo(y) {
+        const rowH = 5.5;
+        // Row 1: NOME | DATA DE ADMISSÃO | C.B.O
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.text('NOME:', ml, y);
+        doc.setFont('helvetica', 'normal'); doc.text(e.employeeName || '-', ml + 18, y);
+        doc.setFont('helvetica', 'bold'); doc.text('DATA DE ADMISSÃO:', 115, y);
+        doc.setFont('helvetica', 'normal'); doc.text(fmtDate(e.admissao) || '-', 148, y);
+        doc.setFont('helvetica', 'bold'); doc.text('C.B.O:', 175, y);
+        doc.setFont('helvetica', 'normal'); doc.text(e.cargo || '-', 188, y);
+        doc.line(ml, y + 1.5, mr, y + 1.5); y += rowH;
 
-      let y = CONTENT_Y; doc.setTextColor(0, 0, 0); doc.setFontSize(9);
-      doc.setFont('helvetica', 'bold'); doc.text('Empresa:', 12, y);
-      doc.setFont('helvetica', 'normal'); doc.text(EMPRESA, 42, y);
-      doc.setFont('helvetica', 'bold'); doc.text('Setor:', 140, y);
-      doc.setFont('helvetica', 'normal'); doc.text(SETOR, 160, y);
-      doc.line(12, y + 1.5, pw - 12, y + 1.5); y += 7;
+        // Row 2: FUNÇÃO | DATA DE DEMISSÃO
+        doc.setFont('helvetica', 'bold'); doc.text('FUNÇÃO:', ml, y);
+        doc.setFont('helvetica', 'normal'); doc.text(e.cargo || '-', ml + 18, y);
+        doc.setFont('helvetica', 'bold'); doc.text('DATA DE DEMISSÃO:', 115, y);
+        doc.setFont('helvetica', 'normal'); doc.text('(___/___/______)', 148, y);
+        doc.line(ml, y + 1.5, mr, y + 1.5); y += rowH;
 
-      // Linha: Nome / Matrícula
-      doc.setFont('helvetica', 'bold'); doc.text('Nome:', 12, y);
-      doc.setFont('helvetica', 'normal'); doc.text(e.employeeName, 32, y);
-      doc.setFont('helvetica', 'bold'); doc.text('Matrícula:', 130, y);
-      doc.setFont('helvetica', 'normal'); doc.text(e.matricula, 158, y);
-      doc.line(12, y + 1.5, pw - 12, y + 1.5); y += 7;
-
-      // Linha: Cargo / Admissão
-      doc.setFont('helvetica', 'bold'); doc.text('Cargo:', 12, y);
-      doc.setFont('helvetica', 'normal'); doc.text(e.cargo || '-', 32, y);
-      doc.setFont('helvetica', 'bold'); doc.text('Data de Admissão:', 130, y);
-      doc.setFont('helvetica', 'normal'); doc.text(fmtDate(e.admissao), 168, y);
-      doc.line(12, y + 1.5, pw - 12, y + 1.5); y += 10;
-
-      // TERMO
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text('TERMO DE CONHECIMENTO E RESPONSABILIDADE', pw / 2, y, { align: 'center' }); y += 5;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5);
-      let lines = doc.splitTextToSize(TERMO, pw - 24);
-      doc.text(lines, 12, y); y += lines.length * 3.2; y += 4;
-      doc.setFontSize(7); doc.setTextColor(80, 80, 80);
-      let lines2 = doc.splitTextToSize(LEIS, pw - 24);
-      doc.text(lines2, 12, y); y += lines2.length * 3.2; y += 6;
-
-      if (y > 245) { doc.addPage(); drawHeader(); y = CONTENT_Y; }
-
-      // RELAÇÃO DE EQUIPAMENTOS
-      doc.setTextColor(0, 0, 0); doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
-      doc.text('RELAÇÃO DE EQUIPAMENTOS', 12, y); y += 5;
-      const cols = [
-        { label: 'QTD', x: 12, w: 14 },
-        { label: 'DESCRIÇÃO DO EPI', x: 26, w: 70 },
-        { label: 'TAM', x: 96, w: 18 },
-        { label: 'Nº CA', x: 114, w: 20 },
-        { label: 'MOTIVO', x: 134, w: 34 },
-        { label: 'DATA DA ENTREGA', x: 168, w: 30 }
-      ];
-      const headerH = 7;
-      function tableHeader(yh) {
-        doc.setFontSize(7.5);
-        cols.forEach(c => { doc.setFillColor(209, 213, 219); doc.rect(c.x, yh - 4, c.w, headerH, 'F'); doc.rect(c.x, yh - 4, c.w, headerH); doc.text(c.label, c.x + 1, yh); });
+        // Row 3: MATRÍCULA | SETOR | UNIDADE / OBRA | CONTRATO
+        doc.setFont('helvetica', 'bold'); doc.text('MATRÍCULA:', ml, y);
+        doc.setFont('helvetica', 'normal'); doc.text(e.matricula || '-', ml + 22, y);
+        doc.setFont('helvetica', 'bold'); doc.text('SETOR:', 65, y);
+        doc.setFont('helvetica', 'normal'); doc.text(SETOR, 80, y);
+        doc.setFont('helvetica', 'bold'); doc.text('UNIDADE / OBRA:', 115, y);
+        doc.setFont('helvetica', 'normal'); doc.text('-', 145, y);
+        doc.setFont('helvetica', 'bold'); doc.text('CONTRATO:', 165, y);
+        doc.setFont('helvetica', 'normal'); doc.text('5900123734', 185, y);
+        doc.line(ml, y + 1.5, mr, y + 1.5); y += rowH;
+        return y;
       }
-      tableHeader(y);
-      doc.setFont('helvetica', 'normal'); y += headerH;
-      const dataStr = fmtDate(d.data);
-      d.itens.forEach(it => {
-        if (y > 270) { doc.addPage(); drawHeader(); y = CONTENT_Y; tableHeader(y); y += headerH; }
-        cols.forEach(c => doc.rect(c.x, y - 4, c.w, headerH));
-        doc.text(String(it.qty), cols[0].x + 1, y);
-        doc.text(it.nome, cols[1].x + 1, y);
-        doc.text(it.tam, cols[2].x + 1, y);
-        doc.text(it.ca || '-', cols[3].x + 1, y);
-        doc.text(it.motivo, cols[4].x + 1, y);
-        doc.text(dataStr, cols[5].x + 1, y);
-        y += headerH;
-      });
-      y += 8;
 
-      // Assinaturas
-      if (y > 200) { doc.addPage(); drawHeader(); y = CONTENT_Y; }
-      doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.text('Assinatura do Colaborador', 20, y);
-      if (d.sig1) { try { doc.addImage(d.sig1, 'PNG', 20, y + 1, 60, sigH(1)); } catch (err) { } }
-      doc.line(20, y + 23, 90, y + 23);
-      doc.setFontSize(6.5); doc.setTextColor(120, 120, 120); doc.text(e.employeeName, 20, y + 26); doc.setTextColor(0, 0, 0);
-      y += 32;
-      if (y > 205) { doc.addPage(); drawHeader(); y = CONTENT_Y; }
-      doc.setFontSize(8.5); doc.setFont('helvetica', 'bold'); doc.text('Assinatura do Responsável pela Entrega (SESMT)', 20, y);
-      if (d.sig2) { try { doc.addImage(d.sig2, 'PNG', 20, y + 1, 60, sigH(2)); } catch (err) { } }
-      doc.line(20, y + 23, 90, y + 23);
-      y += 30;
-      doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.text('Local:', 12, y); doc.setFont('helvetica', 'normal');
-      doc.text('Parauapebas, PA', 26, y);
-      doc.text('Data: ' + fmtDateTime(d.data), 12, y + 5);
+      function drawTableHeader(y) {
+        const headerH = 10;
+        const cols = [
+          { label: 'QT.', x: ml, w: 8 },
+          { label: 'DESCRIÇÃO DO EQUIPAMENTO', x: ml + 8, w: 58 },
+          { label: 'Nº C.A', x: ml + 66, w: 18 },
+          { label: 'QTD', x: ml + 84, w: 10 },
+          { label: 'DATA DE\nRECEBIMENTO', x: ml + 94, w: 22 },
+          { label: 'ASSINATURA\nDO FUNCIONÁRIO', x: ml + 116, w: 28 },
+          { label: 'DATA DE\nDEVOLUÇÃO', x: ml + 144, w: 20 },
+          { label: 'QTD', x: ml + 164, w: 10 },
+          { label: 'MOTIVO\nSUBSTITUIÇÃO', x: ml + 174, w: 16 },
+          { label: 'Obs.', x: ml + 190, w: 8 }
+        ];
+        doc.setTextColor(0, 0, 0);
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.setFontSize(5.5); doc.setFont('helvetica', 'bold');
+        cols.forEach(c => {
+          doc.rect(c.x, y, c.w, headerH, 'D');
+          const lines = c.label.split('\n');
+          lines.forEach((l, i) => doc.text(l, c.x + 1, y + 3 + i * 2.8));
+        });
+        doc.setLineWidth(0.2);
+        return { y: y + headerH, cols };
+      }
 
-      const nomeArq = 'Ficha_EPI_' + e.employeeName.replace(/\s/g, '_') + '_' + d.id + '.pdf';
+      function drawTableRows(y, cols, items) {
+        const rowH = 7;
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        items.forEach((it, idx) => {
+          if (y + rowH > ph - 30) { doc.addPage(); drawPageHeader(2, 2); y = 28; const h = drawTableHeader(y); y = h.y; }
+          doc.rect(cols[0].x, y, cols[0].w, rowH);
+          doc.rect(cols[1].x, y, cols[1].w, rowH);
+          doc.rect(cols[2].x, y, cols[2].w, rowH);
+          doc.rect(cols[3].x, y, cols[3].w, rowH);
+          doc.rect(cols[4].x, y, cols[4].w, rowH);
+          doc.rect(cols[5].x, y, cols[5].w, rowH);
+          doc.rect(cols[6].x, y, cols[6].w, rowH);
+          doc.rect(cols[7].x, y, cols[7].w, rowH);
+          doc.rect(cols[8].x, y, cols[8].w, rowH);
+          doc.rect(cols[9].x, y, cols[9].w, rowH);
+          doc.text(String(idx + 1), cols[0].x + 2.5, y + 5);
+          doc.text(it.nome || '-', cols[1].x + 1, y + 5);
+          doc.text(it.ca || '-', cols[2].x + 1, y + 5);
+          doc.text(String(it.qty || ''), cols[3].x + 2, y + 5);
+          doc.text(fmtDate(d.data), cols[4].x + 1, y + 5);
+          doc.text('-', cols[5].x + 8, y + 5);
+          doc.text('-', cols[6].x + 6, y + 5);
+          doc.text('-', cols[7].x + 2, y + 5);
+          doc.text(it.motivo || '-', cols[8].x + 1, y + 5);
+          doc.text(it.tam || '-', cols[9].x + 1, y + 5);
+          y += rowH;
+        });
+        // Fill remaining empty rows
+        const remaining = Math.max(0, 10 - items.length);
+        for (let i = 0; i < remaining; i++) {
+          if (y + rowH > ph - 30) break;
+          cols.forEach(c => doc.rect(c.x, y, c.w, rowH));
+          doc.text(String(items.length + i + 1), cols[0].x + 2.5, y + 5);
+          y += rowH;
+        }
+        return y;
+      }
+
+      function drawSignatures(y) {
+        // Colaborador
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.text('Assinatura do Colaborador:', ml, y);
+        if (d.sig1) { try { doc.addImage(d.sig1, 'PNG', ml, y + 2, 50, 15); } catch (err) { } }
+        doc.line(ml, y + 20, ml + 70, y + 20);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        doc.text(e.employeeName || '', ml, y + 24);
+
+        // SESMT
+        const y2 = y + 30;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+        doc.text('Assinatura do Responsável pela Entrega (SESMT):', ml, y2);
+        if (d.sig2) { try { doc.addImage(d.sig2, 'PNG', ml, y2 + 2, 50, 15); } catch (err) { } }
+        doc.line(ml, y2 + 20, ml + 70, y2 + 20);
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        doc.text('Responsável', ml, y2 + 24);
+
+        // Local e Data
+        const y3 = y2 + 32;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
+        doc.text('Local: ', ml, y3);
+        doc.setFont('helvetica', 'normal'); doc.text('Parauapebas, PA', ml + 14, y3);
+        doc.setFont('helvetica', 'bold'); doc.text('Data: ', ml + 60, y3);
+        doc.setFont('helvetica', 'normal'); doc.text(fmtDateTime(d.data), ml + 72, y3);
+        return y3 + 8;
+      }
+
+      // === PAGE 1: FICHA DE CONTROLE DE EPI ===
+      drawPageHeader();
+      let y = 28;
+      y = drawTerm(y);
+      y = drawEmployeeInfo(y);
+      y += 2;
+      const tbl = drawTableHeader(y);
+      y = tbl.y;
+      y = drawTableRows(y, tbl.cols, d.itens || []);
+      y += 6;
+      y = drawSignatures(y);
+
+      const nomeArq = 'Ficha_EPI_' + (e.employeeName || '').replace(/\s/g, '_') + '_' + d.id + '.pdf';
       doc.save(nomeArq);
       showToast('📄 PDF gerado!');
     }
@@ -871,17 +1037,25 @@
     // ==================== INIT ====================
     load();
     setLogo();
-    if (USE_API) syncFromServer();
+    updateSyncBadge();
+    const fbReady = initFirebase();
     (function () {
       const qp = new URLSearchParams(location.search);
       const empId = parseInt(qp.get('emp') || '0', 10);
       if (empId) {
-        const e = state.employees.find(x => x.id === empId);
-        if (e) { state.cur.emp = e; state.cart = []; go('empview'); }
-        else if (USE_API) { state.cur.emp = { id: empId, nome: 'Carregando...', matricula: '' }; state.cart = []; go('empview'); syncEmpPublic(empId); }
-        else { go('home'); showToast('❌ Colaborador não encontrado'); }
+        if (fbReady && db) {
+          connectFirebase().then(() => syncEmpPublic(empId));
+        } else {
+          const e = state.employees.find(x => x.id === empId);
+          if (e) { state.cur.emp = e; state.cart = []; go('empview'); }
+          else { go('home'); showToast('❌ Colaborador não encontrado'); }
+        }
       } else {
-        go('home');
+        if (fbReady && db) {
+          connectFirebase().then(() => go('home'));
+        } else {
+          go('home');
+        }
       }
     })();
   

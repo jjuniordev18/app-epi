@@ -70,7 +70,7 @@
     .header {
       background: linear-gradient(135deg, var(--blue-dark), var(--blue));
       color: #fff;
-      padding: 16px 20px;
+      padding: 12px 16px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -89,6 +89,13 @@
     .hdr-left {
       justify-content: flex-start;
       gap: 10px;
+      min-width: 0;
+      flex: 0 0 auto;
+    }
+
+    .hdr-center {
+      flex: 1 1 auto;
+      text-align: center;
       min-width: 0;
     }
 
@@ -114,6 +121,7 @@
     .hdr-btns {
       justify-content: flex-end;
       gap: 6px;
+      flex: 0 0 auto;
     }
 
     .icon-btn {
@@ -126,6 +134,34 @@
       font-size: 15px;
       cursor: pointer;
     }
+    .btn-logout {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.25);
+      color: #fff;
+      border-radius: 8px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .btn-logout:hover { background: rgba(220,38,38,.8); border-color: rgba(220,38,38,.9); }
+    .btn-logout svg { flex-shrink: 0; }
+    .sync-badge {
+      font-size: 11px;
+      color: rgba(255,255,255,.8);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      line-height: 34px;
+    }
+    .sync-badge.sync-ok { color: #4ade80; }
+    .sync-badge.sync-warn { color: #fbbf24; }
 
     .screen {
       padding: 20px;

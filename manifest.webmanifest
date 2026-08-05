@@ -1,7 +1,8 @@
 {
-  "name": "Sonda EPI",
-  "short_name": "EPI",
-  "description": "Controle de entrega e ficha de EPI (SONDA PROCWORK)",
+  "name": "SondaGuard",
+  "short_name": "SondaGuard",
+  "id": "./",
+  "description": "Controle de entrega e ficha de EPI",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
