@@ -163,7 +163,7 @@
       updateSyncBadge();
     }
     async function pushToFirebaseNow() {
-      if (!db) return;
+      if (!db) { console.warn('[FB] db não disponível'); return; }
       try {
         const ops = [];
         state.employees.forEach(e => {
@@ -186,6 +186,7 @@
         syncStatus = 'ok';
         updateSyncBadge();
       } catch (e) {
+        console.error('[FB] push error:', e);
         syncStatus = 'offline';
         updateSyncBadge();
       }
