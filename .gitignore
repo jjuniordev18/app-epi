@@ -1,0 +1,8 @@
+node_modules/
+server/data/
+!server/data/real-employees.example.json
+server/server.log
+server/nul
+.env
+*.xlsx
+nul

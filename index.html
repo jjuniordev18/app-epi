@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1f3a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Ficha de EPI · SONDA PROCWORK</title>
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%231d4ed8'/><text x='50' y='68' font-size='50' text-anchor='middle' fill='white' font-family='Arial'>🦺</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="app">
+    <div class="header">
+      <div class="hdr-left">
+        <img id="logo" alt="Sonda" style="height:38px;width:auto;border-radius:4px;">
+        <div class="hdr-text">
+          <div class="hdr-title">SONDA PROCWORK INFORMATICA LTDA.</div>
+          <div class="hdr-sub">Setor Operacional</div>
+        </div>
+      </div>
+      <div class="hdr-btns">
+        <button class="icon-btn" onclick="toggleDark()" title="Tema">🌙</button>
+      </div>
+    </div>
+
+    <!-- HOME -->
+    <div class="screen active" id="home">
+      <div class="stat-grid">
+        <div class="stat" onclick="go('history')"><b id="stToday">0</b><span>Entregas hoje</span></div>
+        <div class="stat" onclick="go('history')"><b id="stTotal">0</b><span>Total entregas</span></div>
+        <div class="stat" onclick="go('employees')"><b id="stEmp">0</b><span>Funcionários</span></div>
+        <div class="stat" onclick="go('epis')"><b id="stEpi">0</b><span>EPIs cadastrados</span></div>
+      </div>
+      <div id="homeAlerts"></div>
+      <div class="section-title">Ações</div>
+      <button class="btn btn-primary" onclick="go('search')">🔍 NOVA ENTREGA</button>
+      <button class="btn btn-success" onclick="go('delivered')">📦 EPIs entregues</button>
+      <button class="btn btn-secondary" onclick="startScan()">🔳 Ler QR Code</button>
+      <button class="btn btn-secondary" onclick="exportData()">📤 Exportar backup (JSON)</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('fileBackup').click()">📥 Importar
+        backup</button>
+      <input type="file" id="fileBackup" accept=".json,application/json" style="display:none"
+        onchange="importData(event)">
+    </div>
+
+    <!-- SEARCH -->
+    <div class="screen" id="search">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">Identificar Colaborador</h2>
+      <input type="text" id="searchInput" placeholder="🔍 Nome, matrícula ou telefone..."
+        oninput="renderSearch(this.value)" autocomplete="off">
+      <div id="searchResults"></div>
+    </div>
+
+    <!-- EMPLOYEE -->
+    <div class="screen" id="employee">
+      <button class="btn btn-secondary small" onclick="go('search')">← Voltar</button>
+      <div id="empInfo"></div>
+      <div id="empAlerts"></div>
+      <div class="section-title">EPIs entregues</div>
+      <div id="empDelivered"></div>
+      <div class="section-title">EPIs a entregar agora</div>
+      <div id="cart"></div>
+      <button class="btn btn-primary" onclick="go('selectepi')">➕ ADICIONAR EPI</button>
+      <button class="btn btn-success" id="btnFinish" onclick="go('signature')" disabled>FINALIZAR</button>
+    </div>
+
+    <!-- EMP VIEW (acesso via QR Code) -->
+    <div class="screen" id="empview">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <div id="empViewInfo"></div>
+      <div class="section-title">EPIs entregues</div>
+      <div id="empDelivered2"></div>
+      <div class="section-title">Fichas de EPI</div>
+      <div id="empViewHistory"></div>
+    </div>
+
+    <!-- SELECT EPI -->
+    <div class="screen" id="selectepi">
+      <button class="btn btn-secondary small" onclick="go('employee')">← Voltar</button>
+      <h2 style="margin:14px 0;">Selecionar EPI</h2>
+      <input type="text" id="epiSearch" placeholder="🔍 Buscar..." oninput="renderEPIs(this.value)" autocomplete="off">
+      <div id="epiList"></div>
+    </div>
+
+    <!-- CONFIG ITEM -->
+    <div class="screen" id="configitem">
+      <button class="btn btn-secondary small" onclick="go('selectepi')">← Voltar</button>
+      <h2 style="margin:14px 0;" id="cfgName">Configurar</h2>
+      <div class="section-title">Tamanho</div>
+      <div class="size-grid" id="sizeGrid"></div>
+      <div class="section-title">Quantidade</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-secondary" onclick="changeQty(-1)" style="width:50px;padding:8px;">-</button>
+        <input type="number" id="qty" value="1" min="1" style="text-align:center;">
+        <button class="btn btn-secondary" onclick="changeQty(1)" style="width:50px;padding:8px;">+</button>
+      </div>
+      <div class="section-title">Motivo *</div>
+      <div id="reasonGroup">
+        <label class="radio-option"><input type="radio" name="reason" value="Admissão"> Admissão</label>
+        <label class="radio-option"><input type="radio" name="reason" value="Troca por Desgaste" checked> Troca por
+          Desgaste</label>
+        <label class="radio-option"><input type="radio" name="reason" value="Troca por Vencimento"> Troca por
+          Vencimento</label>
+        <label class="radio-option"><input type="radio" name="reason" value="Perda/Extravio"> Perda / Extravio</label>
+        <label class="radio-option"><input type="radio" name="reason" value="Danos por Acidente"> Danos por
+          Acidente</label>
+      </div>
+      <textarea id="obs" placeholder="Observação (opcional)..." rows="2"></textarea>
+      <button class="btn btn-primary" onclick="addItem()">ADICIONAR À FICHA</button>
+    </div>
+
+    <!-- SIGNATURE -->
+    <div class="screen" id="signature">
+      <button class="btn btn-secondary small" onclick="go('employee')">← Voltar</button>
+      <h2 style="margin:14px 0;">Confirmar Entrega</h2>
+      <div id="sigSummary"></div>
+      <div class="section-title">Assinatura do Colaborador</div>
+      <canvas id="signatureCanvas"></canvas>
+      <button class="btn btn-secondary small" onclick="clearSigN(1)">🗑 Limpar</button>
+      <div class="section-title">Assinatura do Responsável pela Entrega (SESMT)</div>
+      <canvas id="signatureCanvas2"></canvas>
+      <button class="btn btn-secondary small" onclick="clearSigN(2)">🗑 Limpar</button>
+      <button class="btn btn-success" id="btnConfirm" onclick="confirmDelivery()" disabled>✓ CONFIRMAR ENTREGA</button>
+    </div>
+
+    <!-- SUCCESS -->
+    <div class="screen" id="success">
+      <div style="text-align:center;padding:40px 20px;">
+        <div style="font-size:64px;">✅</div>
+        <h2 style="margin:16px 0;">Entrega Registrada!</h2>
+        <p style="color:var(--gray);margin-bottom:16px;" id="deliveryId"></p>
+        <button class="btn btn-primary" onclick="generatePDF()">📄 Baixar Ficha (PDF)</button>
+        <button class="btn btn-success" onclick="sendWhatsApp()">📤 Enviar por WhatsApp</button>
+        <button class="btn btn-primary" onclick="newDelivery()">➕ Nova Entrega</button>
+        <button class="btn btn-secondary" onclick="go('history')">📋 Ver histórico</button>
+      </div>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="screen" id="history">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">📋 Histórico de Entregas</h2>
+      <input type="text" placeholder="🔍 Filtrar por nome..." oninput="renderHistory(this.value)" autocomplete="off">
+      <div id="histList"></div>
+    </div>
+
+    <!-- DELIVERED (EPIs entregues) -->
+    <div class="screen" id="delivered">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">📦 EPIs Entregues</h2>
+      <input type="text" placeholder="🔍 Buscar EPI..." oninput="renderDelivered(this.value)" autocomplete="off">
+      <div id="deliveredList"></div>
+    </div>
+
+    <!-- EMPLOYEES -->
+    <div class="screen" id="employees">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">Funcionários</h2>
+      <button class="btn btn-success" onclick="clearEmpForm();go('addemp')">➕ Novo</button>
+      <input type="text" id="empMgmtSearch" placeholder="🔍 Buscar..." oninput="renderEmps(this.value)"
+        autocomplete="off">
+      <div id="empMgmt"></div>
+    </div>
+
+    <!-- ADD EMP -->
+    <div class="screen" id="addemp">
+      <button class="btn btn-secondary small" onclick="go('employees')">← Voltar</button>
+      <h2 style="margin:14px 0;" id="empTitle">➕ Novo Funcionário</h2>
+      <input type="hidden" id="empId">
+      <input type="text" id="fNome" placeholder="Nome completo *">
+      <input type="text" id="fMatricula" placeholder="Matrícula *">
+      <input type="text" id="fCargo" placeholder="Cargo">
+      <input type="text" id="fTelefone" placeholder="Telefone (opcional)">
+      <input type="date" id="fAdmissao">
+      <button class="btn btn-primary" onclick="saveEmp()">💾 SALVAR</button>
+    </div>
+
+    <!-- EPIS -->
+    <div class="screen" id="epis">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">EPIs</h2>
+      <button class="btn btn-success" onclick="clearEpiForm();go('addepi')">➕ Novo</button>
+      <input type="text" id="epiMgmtSearch" placeholder="🔍 Buscar..." oninput="renderEpiMgmt(this.value)"
+        autocomplete="off">
+      <div id="epiMgmt"></div>
+    </div>
+
+    <!-- ADD EPI -->
+    <div class="screen" id="addepi">
+      <button class="btn btn-secondary small" onclick="go('epis')">← Voltar</button>
+      <h2 style="margin:14px 0;" id="epiTitle">➕ Novo EPI</h2>
+      <input type="hidden" id="epiId">
+      <input type="text" id="eNome" placeholder="Nome do EPI *">
+      <input type="text" id="eCA" maxlength="9" placeholder="Nº do CA * (ex: 34567)"
+        title="Nº do Certificado de Aprovação do EPI">
+      <input type="date" id="eCAVal">
+      <input type="text" id="eTamanhos" placeholder="Tamanhos (ex: P,M,G ou Único)">
+      <div class="section-title">Estoque por tamanho (opcional)</div>
+      <input type="text" id="eEstoque" placeholder="Ex: P=5, M=10, G=8">
+      <input type="number" id="eRenov" min="0" placeholder="Validade de uso (dias) — p/ sugerir troca por vencimento"
+        title="Após quantos dias de uso sugerir a troca deste EPI por vencimento (opcional)">
+      <button class="btn btn-primary" onclick="saveEpi()">💾 SALVAR</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="scanModal">
+    <div class="modal" style="text-align:center;">
+      <h3 style="margin-top:0;">🔳 Ler QR Code</h3>
+      <p style="font-size:12px;color:var(--gray);">Aponte para o QR Code do colaborador.</p>
+      <video id="scannerVideo" style="width:100%;border-radius:12px;background:#000;max-height:40vh;" autoplay playsinline muted></video>
+      <p id="scanStatus" style="font-size:12px;color:var(--gray);margin:8px 0;"></p>
+      <button class="btn btn-danger" onclick="stopScan()">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="loginModal">
+    <div class="modal">
+      <h3 style="margin-top:0;">🔒 Acesso ao App</h3>
+      <p style="font-size:12px;color:var(--gray);">Entre com seu usuário e senha.</p>
+      <input type="text" id="loginUser" placeholder="Usuário" autocomplete="username">
+      <div style="height:6px;"></div>
+      <input type="password" id="loginPass" placeholder="Senha" autocomplete="current-password">
+      <div style="height:6px;"></div>
+      <button class="btn btn-primary" onclick="doLogin()">Entrar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <nav class="bottom-nav">
+    <button class="nav-item active" id="nv-home" onclick="go('home')"><span>🏠</span><span>Início</span></button>
+    <button class="nav-item" id="nv-history" onclick="go('history')"><span>📋</span><span>Entregas</span></button>
+    <button class="nav-item" id="nv-employees"
+      onclick="go('employees')"><span>👥</span><span>Funcionários</span></button>
+    <button class="nav-item" id="nv-epis" onclick="go('epis')"><span>🦺</span><span>EPIs</span></button>
+  </nav>
+
+  <div class="modal-overlay" id="qrModal" onclick="if(event.target===this)closeQR()">
+    <div class="modal">
+      <h3 style="margin-top:0;">🔳 QR Code do Colaborador</h3>
+      <div id="qrName" style="font-weight:700;font-size:16px;margin-top:8px;"></div>
+      <div id="qrMat" style="color:var(--gray);font-size:12px;"></div>
+      <div class="qr-wrap">
+        <div id="qrBox"></div>
+      </div>
+      <p style="font-size:11px;color:var(--gray);margin-bottom:8px;">Escaneie para abrir a ficha de EPI deste
+        colaborador.</p>
+      <input class="readonly" id="qrUrl" readonly title="Clique para copiar o link">
+      <div style="height:8px;"></div>
+      <button class="btn btn-primary" onclick="closeQR()">Fechar</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => { }));
+    }
+  </script>
+</body>
+
+</html>

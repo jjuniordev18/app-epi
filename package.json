@@ -1,0 +1,19 @@
+{
+  "name": "app_epi",
+  "version": "1.0.0",
+  "description": "App de controle de entrega de EPI (SONDA PROCWORK)",
+  "main": "app.js",
+  "scripts": {
+    "lint": "eslint app.js server",
+    "lint:fix": "eslint --fix app.js server"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^17.9.0"
+  }
+}
