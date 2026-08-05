@@ -46,7 +46,7 @@
     }
     function save() {
       try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { showToast('⚠️ Armazenamento cheio — exporte um backup (JSON)'); }
-      if (db) pushToFirebase();
+      if (db) { console.log('[FB] save() → pushToFirebase, employees:', state.employees.length); pushToFirebase(); }
     }
     function recomputeCounters() {
       counters.emp = state.employees.reduce((m, e) => Math.max(m, e.id || 0), 0) + 1;
@@ -117,16 +117,22 @@
       return true;
     }
     async function connectFirebase() {
-      if (!auth) return false;
+      if (!auth) { console.warn('[FB] auth não disponível'); return false; }
       try {
+        console.log('[FB] Conectando...');
         await auth.signInAnonymously();
         fbUser = auth.currentUser;
+        console.log('[FB] Auth OK, uid:', fbUser.uid);
+        console.log('[FB] State employees:', state.employees.length);
         await pushToFirebaseNow();
+        console.log('[FB] Push OK');
         await cleanStaleDocs();
+        console.log('[FB] Clean OK');
         listenFirebase();
+        console.log('[FB] Listeners OK — sincronização ativa');
         return true;
       } catch (e) {
-        console.error('Firebase anonymous auth failed:', e);
+        console.error('[FB] Falha:', e);
         return false;
       }
     }
