@@ -17,6 +17,8 @@
     // ==================== ESTADO ====================
     const LS_KEY = 'epi_app_v7';
     const PEND_KEY = 'epi_pending_v1';
+    const SEED_VER_KEY = 'epi_seed_ver';
+    const SEED_VER = 3; // bump para forçar reseed quando o seed mudar
     let state = { employees: [], epis: [], entregas: [], cart: [], cur: {}, sig1: null, sig2: null, itemSigs: [] };
     let counters = { emp: 1, epi: 1 };
     let syncStatus = 'idle'; // idle | syncing | ok | error | offline
@@ -32,7 +34,15 @@
 
     function load() {
       try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s) state = s; } catch (e) { }
-      if (!localStorage.getItem(LS_KEY)) { _wasSeeded = true; seed(); save(); }
+      const savedVer = Number(localStorage.getItem(SEED_VER_KEY)) || 0;
+      if (!localStorage.getItem(LS_KEY) || savedVer < SEED_VER) {
+        _wasSeeded = true;
+        const entregasAntigas = state.entregas || [];
+        seed();
+        state.entregas = entregasAntigas;
+        save();
+        try { localStorage.setItem(SEED_VER_KEY, String(SEED_VER)); } catch (e) { }
+      }
       recomputeCounters();
     }
     function loadPending() {
