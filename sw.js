@@ -1,3 +1,4 @@
+/* global self, caches, fetch, URL */
 const CACHE = 'safeguard-epi-v2';
 const STATICS = [
   './',
