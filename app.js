@@ -20,6 +20,7 @@
     let state = { employees: [], epis: [], entregas: [], cart: [], cur: {}, sig1: null, sig2: null, itemSigs: [] };
     let counters = { emp: 1, epi: 1 };
     let syncStatus = 'idle'; // idle | syncing | ok | error | offline
+    let _wasSeeded = false;
 
     // ====== Backend (API) — desabilitado para GitHub Pages + Firebase ======
     const USE_API = false;
@@ -31,7 +32,7 @@
 
     function load() {
       try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s) state = s; } catch (e) { }
-      if (!localStorage.getItem(LS_KEY)) { seed(); save(); }
+      if (!localStorage.getItem(LS_KEY)) { _wasSeeded = true; seed(); save(); }
       recomputeCounters();
     }
     function loadPending() {
@@ -123,12 +124,17 @@
         await auth.signInAnonymously();
         fbUser = auth.currentUser;
         console.log('[FB] Auth OK, uid:', fbUser.uid);
-        console.log('[FB] State employees:', state.employees.length);
-        await pushToFirebaseNow();
-        console.log('[FB] Push OK');
-        await cleanStaleDocs();
-        console.log('[FB] Clean OK');
-        listenFirebase();
+        if (_wasSeeded) {
+          console.log('[FB] Seed detectado — puxando dados do Firebase (sem sobrescrever)');
+          await listenFirebasePull();
+        } else {
+          console.log('[FB] State employees:', state.employees.length);
+          await pushToFirebaseNow();
+          console.log('[FB] Push OK');
+          await cleanStaleDocs();
+          console.log('[FB] Clean OK');
+          listenFirebase();
+        }
         console.log('[FB] Listeners OK — sincronização ativa');
         return true;
       } catch (e) {
@@ -167,6 +173,49 @@
       });
       syncStatus = 'ok';
       updateSyncBadge();
+    }
+    async function listenFirebasePull() {
+      if (_listenersAttached) return;
+      _listenersAttached = true;
+      try {
+        const empSnap = await db.collection('employees').get();
+        const epiSnap = await db.collection('epis').get();
+        const entSnap = await db.collection('entregas').get();
+        const fbEmps = empSnap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+        const fbEpis = epiSnap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+        const fbEnts = entSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (fbEmps.length > 0) state.employees = fbEmps;
+        if (fbEpis.length > 0) state.epis = fbEpis;
+        if (fbEnts.length > 0) state.entregas = fbEnts;
+        recomputeCounters();
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+        if (fbEmps.length === 0 && fbEpis.length === 0) {
+          console.log('[FB] Firebase vazio — fazendo push do seed local');
+          await pushToFirebaseNow();
+        }
+        db.collection('employees').onSnapshot(snap => {
+          state.employees = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+          recomputeCounters();
+          try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+          if (curScreen) go(curScreen);
+        });
+        db.collection('epis').onSnapshot(snap => {
+          state.epis = snap.docs.map(d => ({ id: Number(d.id), ...d.data() }));
+          recomputeCounters();
+          try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+        });
+        db.collection('entregas').onSnapshot(snap => {
+          state.entregas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { }
+        });
+        syncStatus = 'ok';
+        updateSyncBadge();
+        go(curScreen);
+      } catch (e) {
+        console.error('[FB] Pull error:', e);
+        syncStatus = 'error';
+        updateSyncBadge();
+      }
     }
     async function pushToFirebaseNow() {
       if (!db) { console.warn('[FB] db não disponível'); return; }
