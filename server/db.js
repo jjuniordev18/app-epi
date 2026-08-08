@@ -313,11 +313,11 @@ function mergeState(client) {
   const selP = db.prepare('SELECT * FROM epis WHERE id = ?');
   const selD = db.prepare('SELECT id FROM entregas WHERE id = ?');
 
-  const insE = db.prepare('INSERT INTO employees (id, nome, matricula, cargo, telefone, admissao, updated_at, deleted) VALUES (?,?,?,?,?,?,?,0)');
+  const insE = db.prepare('INSERT INTO employees (id, nome, matricula, cargo, telefone, admissao, updated_at, deleted) VALUES (?,?,?,?,?,?,?,?)');
   const updE = db.prepare('UPDATE employees SET nome=?, matricula=?, cargo=?, telefone=?, admissao=?, updated_at=? WHERE id=?');
   const delE = db.prepare('UPDATE employees SET deleted=1, updated_at=? WHERE id=?');
 
-  const insP = db.prepare('INSERT INTO epis (id, nome, ca, ca_val, tamanhos, estoque, renovacao_dias, estoque_min, updated_at, deleted) VALUES (?,?,?,?,?,?,?,?,?,0)');
+  const insP = db.prepare('INSERT INTO epis (id, nome, ca, ca_val, tamanhos, estoque, renovacao_dias, estoque_min, updated_at, deleted) VALUES (?,?,?,?,?,?,?,?,?,?)');
   const updP = db.prepare('UPDATE epis SET nome=?, ca=?, ca_val=?, tamanhos=?, estoque=?, renovacao_dias=?, estoque_min=?, updated_at=? WHERE id=?');
   const delP = db.prepare('UPDATE epis SET deleted=1, updated_at=? WHERE id=?');
 
@@ -329,7 +329,7 @@ function mergeState(client) {
       if (!e || !e.id) continue;
       const cur = selE.get(Number(e.id));
       const ts = e.updatedAt || now;
-      if (!cur) insE.run(Number(e.id), e.nome, String(e.matricula || ''), e.cargo || '', e.telefone || '', e.admissao || '', ts);
+      if (!cur) insE.run(Number(e.id), e.nome, String(e.matricula || ''), e.cargo || '', e.telefone || '', e.admissao || '', ts, 0);
       else if (ts >= cur.updated_at) updE.run(e.nome, String(e.matricula || ''), e.cargo || '', e.telefone || '', e.admissao || '', ts, Number(e.id));
     }
     (c.deletedEmployees || []).forEach(id => { const r = selE.get(Number(id)); if (r && !r.deleted) delE.run(now, Number(id)); });
@@ -338,7 +338,7 @@ function mergeState(client) {
       if (!p || !p.id) continue;
       const cur = selP.get(Number(p.id));
       const ts = p.updatedAt || now;
-      if (!cur) insP.run(Number(p.id), p.nome, String(p.ca || ''), p.caVal || '', JSON.stringify(p.tamanhos || ['Único']), JSON.stringify(p.estoque || {}), p.renovacaoDias || 0, p.estoqueMin || 0, ts);
+      if (!cur) insP.run(Number(p.id), p.nome, String(p.ca || ''), p.caVal || '', JSON.stringify(p.tamanhos || ['Único']), JSON.stringify(p.estoque || {}), p.renovacaoDias || 0, p.estoqueMin || 0, ts, 0);
       else if (ts >= cur.updated_at) updP.run(p.nome, String(p.ca || ''), p.caVal || '', JSON.stringify(p.tamanhos || ['Único']), JSON.stringify(p.estoque || {}), p.renovacaoDias || 0, p.estoqueMin || 0, ts, Number(p.id));
     }
     (c.deletedEpis || []).forEach(id => { const r = selP.get(Number(id)); if (r && !r.deleted) delP.run(now, Number(id)); });

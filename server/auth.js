@@ -4,7 +4,7 @@
 
 const crypto = require('crypto');
 const db = require('./db');
-const { hashPassword, verifyPassword } = require('./crypto');
+const { verifyPassword } = require('./crypto');
 
 const TTL_MS = (parseInt(process.env.TOKEN_TTL_MIN, 10) || 480) * 60 * 1000;
 const sessions = new Map(); // token -> { userId, role, exp }

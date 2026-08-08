@@ -17,7 +17,7 @@
     // ==================== ESTADO ====================
     const LS_KEY = 'epi_app_v7';
     const PEND_KEY = 'epi_pending_v1';
-    let state = { employees: [], epis: [], entregas: [], cart: [], cur: {}, sig1: null, sig2: null };
+    let state = { employees: [], epis: [], entregas: [], cart: [], cur: {}, sig1: null, sig2: null, itemSigs: [] };
     let counters = { emp: 1, epi: 1 };
     let syncStatus = 'idle'; // idle | syncing | ok | error | offline
 
@@ -101,7 +101,7 @@
           { id: 7, nome: 'Luva Anti-corte EPI', ca: '89012', caVal: '2028-04-18', tamanhos: ['P', 'M', 'G', 'GG'], estoque: { P: 20, M: 25, G: 20, GG: 10 } },
           { id: 8, nome: 'Luva Anti-impacto', ca: '90123', caVal: '2028-03-10', tamanhos: ['P', 'M', 'G', 'GG'], estoque: { P: 10, M: 12, G: 10, GG: 6 } },
           { id: 9, nome: 'Touca Balaclava Hercules', ca: '90234', caVal: '2028-05-01', tamanhos: ['Único'], estoque: { 'Único': 20 } }
-        ], entregas: [], cart: [], cur: {}, sig1: null, sig2: null
+        ], entregas: [], cart: [], cur: {}, sig1: null, sig2: null, itemSigs: []
       };
       save();
     }
@@ -219,6 +219,10 @@
     // ==================== UTILS ====================
     function go(id) {
       curScreen = id;
+      if (document.documentElement.classList.contains('kiosk')) {
+        if (_kioskHistory[_kioskHistory.length - 1] !== id) _kioskHistory.push(id);
+        if (_kioskHistory.length > 20) _kioskHistory.shift();
+      }
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       if (id === 'home') renderHome();
@@ -231,10 +235,15 @@
       if (id === 'delivered') renderDelivered('');
       if (id === 'employees') renderEmps('');
       if (id === 'epis') renderEpiMgmt('');
+      if (id === 'recover') { document.getElementById('recoverPwd').value = ''; document.getElementById('recoverAuth').style.display = ''; document.getElementById('recoverContent').style.display = 'none'; }
+      if (id === 'report') { if (!document.getElementById('reportFrom').value) { const d = new Date(); d.setDate(1); document.getElementById('reportFrom').value = d.toISOString().slice(0, 10); document.getElementById('reportTo').value = new Date().toISOString().slice(0, 10); } renderReport(); }
+      if (id === 'devolution') renderDevolution();
+      if (id === 'dashboard') renderDashboard();
       ['home', 'history', 'employees', 'epis'].forEach(s => {
         const el = document.getElementById('nv-' + s);
         if (el) el.classList.toggle('active', s === id);
       });
+      updateKioskUI();
       window.scrollTo(0, 0);
     }
     function showToast(m) { const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(showToast._t); showToast._t = setTimeout(() => t.classList.remove('show'), 3000); }
@@ -258,12 +267,30 @@
     function estoqueLimitado(e) { return !!(e && e.estoque && Object.keys(e.estoque).length); }
     function stockLim(e, t) { return estoqueLimitado(e) ? ((e.estoque[t] || 0)) : Infinity; }
 
+    const MOON_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+    const SUN_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    function setThemeIcon(dark) {
+      const svg = dark ? SUN_SVG : MOON_SVG;
+      const btn = document.getElementById('themeBtn');
+      if (btn) btn.innerHTML = svg;
+      const kb = document.getElementById('kioskThemeBtn');
+      if (kb) kb.innerHTML = svg;
+    }
     function toggleDark() {
       const html = document.documentElement; const on = html.classList.toggle('dark');
       localStorage.setItem('epi_dark', on ? '1' : '0');
-      document.querySelector('.icon-btn').textContent = on ? '☀️' : '🌙';
+      setThemeIcon(on);
     }
-    (function () { if (localStorage.getItem('epi_dark') === '1') { document.documentElement.classList.add('dark'); document.querySelector('.icon-btn').textContent = '☀️'; } })();
+    (function () { const dark = localStorage.getItem('epi_dark') === '1'; if (dark) { document.documentElement.classList.add('dark'); } setThemeIcon(dark); })();
+
+    // ==================== VERIFICATION GATE — DELETE ====================
+    const TRASH_SVG = '<svg class="del-icon" viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path d="M135.2 17.7L128 32H32C14.3 32 0 46.3 0 64S14.3 96 32 96H416c17.7 0 32-14.3 32-32S433.7 32 416 32H320l-7.2-14.3C307.4 6.8 300.3 0 291.2 0H156.8c-9.1 0-16.2 6.8-18.4 14.1zM96 416c0 35.3 28.7 64 64 64H288c35.3 0 64-28.7 64-64V192H96V416zm176-44.8c0-8.5-6.9-15.2-15.2-15.2H223.2c-8.5 0-15.2 6.7-15.2 15.2V384h32v-12.8z"/></svg>';
+    function confirmDelete(msg) {
+      const pwd = prompt('Digite a senha para excluir:');
+      if (pwd !== '2121') { showToast('❌ Senha incorreta'); return false; }
+      if (!confirm(msg)) return false;
+      return true;
+    }
 
     // ==================== HOME ====================
     function renderHome() {
@@ -281,7 +308,8 @@
       });
       state.epis.forEach(e => {
         const total = Object.values(e.estoque || {}).reduce((a, b) => a + b, 0);
-        if (estoqueLimitado(e) && total === 0) alerts.push({ t: 'warning', msg: `📦 Sem estoque: ${esc(e.nome)}` });
+        if (estoqueLimitado(e) && total === 0) alerts.push({ t: 'danger', msg: `🚫 Sem estoque: ${esc(e.nome)}` });
+        else if (estoqueLimitado(e) && e.estoqueMin && total > 0 && total <= e.estoqueMin) alerts.push({ t: 'warning', msg: `⚠️ Estoque baixo: ${esc(e.nome)} — ${total} un. (mín: ${e.estoqueMin})` });
       });
       document.getElementById('homeAlerts').innerHTML = alerts.length
         ? alerts.map(a => `<div class="alert alert-${a.t}">${a.msg}</div>`).join('')
@@ -309,6 +337,7 @@
       state.cur.emp = state.employees.find(e => e.id === id);
       state.cart = [];
       state.sig1 = state.sig2 = null;
+      state.itemSigs = [];
       go('employee');
     }
 
@@ -454,31 +483,108 @@
 
     function renderSig() {
       const e = state.cur.emp;
+      state.itemSigs = state.itemSigs || state.cart.map(() => null);
+      while (state.itemSigs.length < state.cart.length) state.itemSigs.push(null);
+
+      const dateInput = document.getElementById('deliveryDate');
+      if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().slice(0, 10);
+      }
+
       document.getElementById('sigSummary').innerHTML = `
     <div class="card static" style="font-size:13px;">
       <div><strong>👤 ${esc(e.nome)}</strong> — Mat: ${esc(e.matricula)}</div>
       <div style="color:var(--gray);">📅 ${new Date().toLocaleString('pt-BR')}</div>
       <div style="color:var(--gray);">💼 Cargo: ${esc(e.cargo || '-')}</div>
     </div>
-    <div class="section-title">Resumo</div>
-    ${state.cart.map(it => `<div class="item-row" style="font-size:13px;"><span>${it.qty}x ${esc(it.nome)} (${esc(it.tam)})</span><span style="color:var(--gray);">${esc(it.motivo)}</span></div>`).join('')}
-    <div class="alert alert-warning" style="font-size:12px;">Assine nos dois campos para confirmar a entrega.</div>`;
-      for (const n of [1, 2]) {
-        setupCanvas(n);
-        const txtInput = document.getElementById('sigText' + n);
-        if (state['sig' + n]) {
-          const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
+    <div class="alert alert-warning" style="font-size:12px;">Assine cada EPI individualmente para confirmar o recebimento.</div>`;
+
+      const container = document.getElementById('itemSigsContainer');
+      container.innerHTML = state.cart.map((it, i) => `
+    <div class="card static" style="margin-bottom:10px;">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px;">Assinatura para: ${it.qty}x ${esc(it.nome)} (${esc(it.tam)})</div>
+      <canvas id="signatureCanvas_item_${i}" style="width:100%;height:80px;border:1px solid var(--border);border-radius:8px;touch-action:none;"></canvas>
+      <input type="text" id="sigText_item_${i}" placeholder="Ou digite seu nome aqui..." oninput="renderSigTextItem(${i})"
+        style="margin:6px 0;width:100%;font-family:'Brush Script MT','Segoe Script',cursive;font-size:18px;">
+      <button class="btn btn-secondary small" onclick="clearSigItem(${i})">🗑 Limpar</button>
+    </div>`).join('');
+
+      for (let i = 0; i < state.cart.length; i++) {
+        setupCanvasItem(i);
+        if (state.itemSigs[i]) {
+          const c = document.getElementById('signatureCanvas_item_' + i);
           const img = new Image();
           img.onload = () => { const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.drawImage(img, 0, 0, c.width / dpr, c.height / dpr); };
-          img.src = state['sig' + n];
-        } else {
-          if (txtInput) txtInput.value = '';
+          img.src = state.itemSigs[i];
         }
+      }
+
+      setupCanvas(2);
+      const txtInput = document.getElementById('sigText2');
+      if (state.sig2) {
+        const c = document.getElementById('signatureCanvas2');
+        const img = new Image();
+        img.onload = () => { const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.drawImage(img, 0, 0, c.width / dpr, c.height / dpr); };
+        img.src = state.sig2;
+      } else {
+        if (txtInput) txtInput.value = '';
       }
       checkConfirm();
     }
+
+    function setupCanvasItem(idx) {
+      const c = document.getElementById('signatureCanvas_item_' + idx);
+      if (!c) return;
+      const rect = c.getBoundingClientRect();
+      const dw = Math.round(rect.width) || 400;
+      const dh = Math.round(rect.height) || 80;
+      const dpr = window.devicePixelRatio || 1;
+      c.width = dw * dpr; c.height = dh * dpr;
+      c.style.width = dw + 'px'; c.style.height = dh + 'px';
+      const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+      ctx.strokeStyle = '#1e3a8a'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      let drawing = false;
+      function pos(e) { const r = c.getBoundingClientRect(); const t = e.touches ? e.touches[0] : e; return [t.clientX - r.left, t.clientY - r.top]; }
+      function start(e) { drawing = true; document.getElementById('sigText_item_' + idx).value = ''; const [x, y] = pos(e); ctx.beginPath(); ctx.moveTo(x, y); }
+      function move(e) { if (!drawing) return; const [x, y] = pos(e); ctx.lineTo(x, y); ctx.stroke(); state.itemSigs[idx] = c.toDataURL(); checkConfirm(); }
+      function end() { drawing = false; }
+      c.onmousedown = start; c.onmousemove = move; c.onmouseup = end; c.onmouseleave = end;
+      c.ontouchstart = e => { e.preventDefault(); start(e); };
+      c.ontouchmove = e => { e.preventDefault(); move(e); };
+      c.ontouchend = e => { e.preventDefault(); end(); };
+    }
+    function clearSigItem(idx) {
+      const c = document.getElementById('signatureCanvas_item_' + idx);
+      if (!c) return;
+      const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1;
+      ctx.clearRect(0, 0, c.width / dpr, c.height / dpr);
+      state.itemSigs[idx] = null;
+      document.getElementById('sigText_item_' + idx).value = '';
+      checkConfirm();
+    }
+    function renderSigTextItem(idx) {
+      const input = document.getElementById('sigText_item_' + idx);
+      const txt = input.value.trim();
+      const c = document.getElementById('signatureCanvas_item_' + idx);
+      if (!c) return;
+      const ctx = c.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const dw = c.width / dpr, dh = c.height / dpr;
+      ctx.clearRect(0, 0, dw, dh);
+      if (!txt) { state.itemSigs[idx] = null; checkConfirm(); return; }
+      const fontSize = Math.max(16, Math.min(36, dw / txt.length * 1.2));
+      ctx.font = fontSize + 'px "Brush Script MT", "Segoe Script", cursive';
+      ctx.fillStyle = '#1e3a8a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, dw / 2, dh / 2);
+      state.itemSigs[idx] = c.toDataURL();
+      checkConfirm();
+    }
+
     function setupCanvas(n) {
       const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
+      if (!c) return;
       const rect = c.getBoundingClientRect();
       const dw = Math.round(rect.width) || 400;
       const dh = Math.round(rect.height) || 120;
@@ -497,11 +603,12 @@
       c.ontouchmove = e => { e.preventDefault(); move(e); };
       c.ontouchend = e => { e.preventDefault(); end(); };
     }
-    function clearSigN(n) { const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2')); const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.clearRect(0, 0, c.width / dpr, c.height / dpr); state['sig' + n] = null; document.getElementById('sigText' + n).value = ''; checkConfirm(); }
+    function clearSigN(n) { const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2')); if (!c) return; const ctx = c.getContext('2d'); const dpr = window.devicePixelRatio || 1; ctx.clearRect(0, 0, c.width / dpr, c.height / dpr); state['sig' + n] = null; document.getElementById('sigText' + n).value = ''; checkConfirm(); }
     function renderSigText(n) {
       const input = document.getElementById('sigText' + n);
       const txt = input.value.trim();
       const c = document.getElementById('signatureCanvas' + (n === 1 ? '' : '2'));
+      if (!c) return;
       const ctx = c.getContext('2d');
       const dpr = window.devicePixelRatio || 1;
       const dw = c.width / dpr, dh = c.height / dpr;
@@ -516,7 +623,16 @@
       state['sig' + n] = c.toDataURL();
       checkConfirm();
     }
-    function checkConfirm() { document.getElementById('btnConfirm').disabled = !(state.sig1 && state.sig2); }
+    function checkConfirm() {
+      const allItemsSigned = state.cart.length > 0 && state.cart.every((_, i) => !!state.itemSigs[i]);
+      document.getElementById('btnConfirm').disabled = !(allItemsSigned && state.sig2);
+    }
+    function confirmLeaveSig() {
+      const hasAnySig = state.sig2 || state.itemSigs.some(s => !!s);
+      if (hasAnySig && !confirm('Você tem assinaturas pendentes. Deseja sair e perder as assinaturas?')) return;
+      if (hasAnySig) { state.sig2 = null; state.itemSigs = state.cart.map(() => null); }
+      go('employee');
+    }
 
     function confirmDelivery() {
       // validação de estoque no momento da confirmação
@@ -524,7 +640,9 @@
         const epi = state.epis.find(x => x.id === it.epiId);
         if (stockLim(epi, it.tam) < it.qty) { showToast('🚫 Estoque insuficiente: ' + it.nome); return; }
       }
-      const data = new Date().toISOString();
+      const dateInput = document.getElementById('deliveryDate');
+      const dataStr = dateInput && dateInput.value ? dateInput.value : new Date().toISOString().slice(0, 10);
+      const data = new Date(dataStr + 'T12:00:00').toISOString();
       const delivery = {
         id: 'FICHA-' + Date.now(),
         data,
@@ -534,7 +652,9 @@
         cargo: state.cur.emp.cargo,
         admissao: state.cur.emp.admissao,
         itens: state.cart.map(it => ({ ...it })),
-        sig1: state.sig1, sig2: state.sig2
+        sig1: state.itemSigs.slice(),
+        sig2: state.sig2,
+        itemSigs: state.itemSigs.slice()
       };
       // baixa no estoque
       const _now = new Date().toISOString();
@@ -546,19 +666,26 @@
       state.entregas.push(delivery);
       state.lastDelivery = delivery;
       state.cart = [];
+      state.itemSigs = [];
       addPending('entrega', 'upsert', { ...delivery });
       save();
       document.getElementById('deliveryId').textContent = 'ID: ' + delivery.id;
       go('success'); showToast('✅ Entrega registrada!');
     }
-    function newDelivery() { state.cur.emp = null; state.cart = []; state.sig1 = state.sig2 = null; go('home'); }
+    function newDelivery() { state.cur.emp = null; state.cart = []; state.sig1 = state.sig2 = null; state.itemSigs = []; go('home'); }
 
     // ==================== HISTÓRICO ====================
     function renderHistory(q) {
       q = (q || '').toLowerCase();
       const list = [...state.entregas].reverse().filter(d => d.employeeName.toLowerCase().includes(q));
       const admin = isAdmin();
-      document.getElementById('histList').innerHTML = list.length ? list.map(d => {
+      const totalItensGeral = list.reduce((a, d) => a + d.itens.reduce((b, i) => b + i.qty, 0), 0);
+      const totaisHtml = `<div class="card static" style="display:flex;justify-content:space-around;text-align:center;padding:12px;">
+        <div><b style="color:var(--color-brand);font-size:20px;">${list.length}</b><div style="font-size:11px;color:var(--gray);">Entregas</div></div>
+        <div><b style="color:var(--color-brand);font-size:20px;">${totalItensGeral}</b><div style="font-size:11px;color:var(--gray);">Itens</div></div>
+        <div><b style="color:var(--color-brand);font-size:20px;">${new Set(list.map(d => d.employeeId)).size}</b><div style="font-size:11px;color:var(--gray);">Colaboradores</div></div>
+      </div>`;
+      document.getElementById('histList').innerHTML = totaisHtml + (list.length ? list.map(d => {
         const totalItens = d.itens.reduce((a, i) => a + i.qty, 0);
         return `
     <div class="card static">
@@ -569,21 +696,25 @@
           <div style="font-size:12px;color:var(--gray);">${d.itens.map(i => `${i.qty}x ${esc(i.nome)}`).join(' · ')}</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;">
-          ${admin ? `<button class="btn btn-danger small" onclick="delEntrega('${d.id}')" title="Excluir">🗑</button>` : ''}
+          ${admin ? `<button class="delete-btn" onclick="delEntrega('${d.id}')" title="Excluir">${TRASH_SVG}</button>` : ''}
           <button class="btn btn-primary small" onclick="viewDelivery('${d.id}')">📄 Ficha</button>
         </div>
       </div>
     </div>`;
-      }).join('') : '<p class="empty">Nenhuma entrega registrada</p>';
+      }).join('') : '<p class="empty">Nenhuma entrega registrada</p>');
     }
 
     function viewDelivery(id) {
       state.lastDelivery = state.entregas.find(d => d.id === id);
       if (state.lastDelivery) generatePDF();
     }
+    function checkPassword() {
+      const pwd = prompt('Digite a senha para excluir:');
+      return pwd === '2121';
+    }
     function delEntrega(id) {
       if (!isAdmin()) { showToast('❌ Apenas administradores podem excluir entregas'); return; }
-      if (!confirm('Excluir esta entrega? O estoque será devolvido.')) return;
+      if (!confirmDelete('Excluir esta entrega? O estoque será devolvido.')) return;
       const d = state.entregas.find(x => x.id === id);
       if (d) {
         const _now = new Date().toISOString();
@@ -594,10 +725,10 @@
             epi.updatedAt = _now;
           }
         });
+        state.deletedEntregas = state.deletedEntregas || [];
+        state.deletedEntregas.push({ ...d });
       }
       state.entregas = state.entregas.filter(x => x.id !== id);
-      state.deletedEntregas = state.deletedEntregas || [];
-      state.deletedEntregas.push(id);
       addPending('entrega', 'delete', { id });
       save();
       renderHistory('');
@@ -655,15 +786,15 @@
     <div class="card static"><div style="display:flex;justify-content:space-between;align-items:center;">
       <div><div style="font-weight:600;">${esc(e.nome)}</div>
       <div style="font-size:12px;color:var(--gray);">Mat: ${esc(e.matricula)} | Cargo: ${esc(e.cargo || '-')}</div></div>
-      <div style="display:flex;gap:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
         <button class="btn btn-warning small" onclick="openQR(${e.id})" title="QR Code">🔳</button>
         <button class="btn btn-primary small" onclick="editEmp(${e.id})">✏️</button>
-        <button class="btn btn-danger small" onclick="delEmp(${e.id})">🗑</button>
+        <button class="delete-btn" onclick="delEmp(${e.id})" title="Excluir">${TRASH_SVG}</button>
       </div></div></div>`).join('') || '<p class="empty">Nenhum funcionário</p>';
     }
     function clearEmpForm() { ['empId', 'fNome', 'fMatricula', 'fCargo', 'fTelefone'].forEach(k => document.getElementById(k).value = ''); document.getElementById('fAdmissao').value = ''; document.getElementById('empTitle').textContent = '➕ Novo Funcionário'; }
     function editEmp(id) { const e = state.employees.find(x => x.id === id); document.getElementById('empId').value = e.id; document.getElementById('fNome').value = e.nome; document.getElementById('fMatricula').value = e.matricula; document.getElementById('fCargo').value = e.cargo || ''; document.getElementById('fTelefone').value = e.telefone || ''; document.getElementById('fAdmissao').value = e.admissao || ''; document.getElementById('empTitle').textContent = '✏️ Editar'; go('addemp'); }
-    function delEmp(id) { if (confirm('Excluir funcionário?')) { state.deletedEmployees = state.deletedEmployees || []; state.deletedEmployees.push(id); state.employees = state.employees.filter(e => e.id !== id); addPending('employee', 'delete', { id }); save(); renderEmps(''); } }
+    function delEmp(id) { if (!confirmDelete('Excluir este funcionário?')) return; const emp = state.employees.find(e => e.id === id); state.deletedEmployees = state.deletedEmployees || []; if (emp) state.deletedEmployees.push({ ...emp }); state.employees = state.employees.filter(e => e.id !== id); addPending('employee', 'delete', { id }); save(); renderEmps(''); showToast('🗑 Funcionário excluído'); }
     function saveEmp() {
       const id = document.getElementById('empId').value;
       const nome = document.getElementById('fNome').value.trim(), matricula = document.getElementById('fMatricula').value.trim();
@@ -689,15 +820,15 @@
     <div class="card static"><div style="display:flex;justify-content:space-between;align-items:center;">
       <div><div style="font-weight:600;">${esc(e.nome)} ${venc ? '<span class="badge badge-danger">CA vencido</span>' : ''}</div>
       <div style="font-size:12px;color:var(--gray);">CA: ${esc(e.ca)} | Estoque: ${estLabel} | Válido: ${fmtDate(e.caVal) || '-'}</div></div>
-      <div style="display:flex;gap:6px;">
+      <div style="display:flex;gap:6px;align-items:center;">
         <button class="btn btn-primary small" onclick="editEpi(${e.id})">✏️</button>
-        <button class="btn btn-danger small" onclick="delEpi(${e.id})">🗑</button>
+        <button class="delete-btn" onclick="delEpi(${e.id})" title="Excluir">${TRASH_SVG}</button>
       </div></div></div>`;
       }).join('') || '<p class="empty">Nenhum EPI</p>';
     }
-    function clearEpiForm() { ['epiId', 'eNome', 'eCA', 'eEstoque', 'eRenov'].forEach(k => document.getElementById(k).value = ''); document.getElementById('eCAVal').value = ''; document.getElementById('eTamanhos').value = ''; document.getElementById('epiTitle').textContent = '➕ Novo EPI'; }
-    function editEpi(id) { const e = state.epis.find(x => x.id === id); document.getElementById('epiId').value = e.id; document.getElementById('eNome').value = e.nome; document.getElementById('eCA').value = e.ca; document.getElementById('eCAVal').value = e.caVal || ''; document.getElementById('eTamanhos').value = (e.tamanhos || []).join(', '); document.getElementById('eEstoque').value = Object.entries(e.estoque || {}).map(([t, n]) => t + '=' + n).join(', '); document.getElementById('eRenov').value = e.renovacaoDias || ''; document.getElementById('epiTitle').textContent = '✏️ Editar'; go('addepi'); }
-    function delEpi(id) { if (confirm('Excluir EPI?')) { state.deletedEpis = state.deletedEpis || []; state.deletedEpis.push(id); state.epis = state.epis.filter(e => e.id !== id); addPending('epi', 'delete', { id }); save(); renderEpiMgmt(''); } }
+    function clearEpiForm() { ['epiId', 'eNome', 'eCA', 'eEstoque', 'eRenov', 'eEstoqueMin'].forEach(k => document.getElementById(k).value = ''); document.getElementById('eCAVal').value = ''; document.getElementById('eTamanhos').value = ''; document.getElementById('epiTitle').textContent = '➕ Novo EPI'; }
+    function editEpi(id) { const e = state.epis.find(x => x.id === id); document.getElementById('epiId').value = e.id; document.getElementById('eNome').value = e.nome; document.getElementById('eCA').value = e.ca; document.getElementById('eCAVal').value = e.caVal || ''; document.getElementById('eTamanhos').value = (e.tamanhos || []).join(', '); document.getElementById('eEstoque').value = Object.entries(e.estoque || {}).map(([t, n]) => t + '=' + n).join(', '); document.getElementById('eRenov').value = e.renovacaoDias || ''; document.getElementById('eEstoqueMin').value = e.estoqueMin || ''; document.getElementById('epiTitle').textContent = '✏️ Editar'; go('addepi'); }
+    function delEpi(id) { if (!confirmDelete('Excluir este EPI?')) return; const epi = state.epis.find(e => e.id === id); state.deletedEpis = state.deletedEpis || []; if (epi) state.deletedEpis.push({ ...epi }); state.epis = state.epis.filter(e => e.id !== id); addPending('epi', 'delete', { id }); save(); renderEpiMgmt(''); showToast('🗑 EPI excluído'); }
     function parseEstoque(str) {
       const out = {};
       (str || '').split(',').forEach(p => {
@@ -714,10 +845,11 @@
       const caVal = document.getElementById('eCAVal').value;
       const estoque = parseEstoque(document.getElementById('eEstoque').value);
       const renovacaoDias = parseInt(document.getElementById('eRenov').value) || 0;
+      const estoqueMin = parseInt(document.getElementById('eEstoqueMin').value) || 0;
       const updatedAt = new Date().toISOString();
       let epi;
-      if (id) { epi = state.epis.find(x => x.id == id); epi.nome = nome; epi.ca = ca; epi.caVal = caVal; epi.tamanhos = tamanhos; epi.estoque = estoque; epi.renovacaoDias = renovacaoDias; epi.updatedAt = updatedAt; }
-      else { epi = { id: counters.epi++, nome, ca, caVal, tamanhos, estoque, renovacaoDias, estoqueMin: 0, updatedAt }; state.epis.push(epi); }
+      if (id) { epi = state.epis.find(x => x.id == id); epi.nome = nome; epi.ca = ca; epi.caVal = caVal; epi.tamanhos = tamanhos; epi.estoque = estoque; epi.renovacaoDias = renovacaoDias; epi.estoqueMin = estoqueMin; epi.updatedAt = updatedAt; }
+      else { epi = { id: counters.epi++, nome, ca, caVal, tamanhos, estoque, renovacaoDias, estoqueMin, updatedAt }; state.epis.push(epi); }
       addPending('epi', 'upsert', { ...epi });
       save(); go('epis'); renderEpiMgmt('');
     }
@@ -746,7 +878,8 @@
             cart: [],
             cur: {},
             sig1: null,
-            sig2: null
+            sig2: null,
+            itemSigs: []
           };
           save();
           recomputeCounters();
@@ -756,6 +889,381 @@
       };
       r.readAsText(f);
       ev.target.value = '';
+    }
+
+    // ==================== RECUPERAÇÃO DE ITENS EXCLUÍDOS ====================
+    function authRecover() {
+      const pwd = document.getElementById('recoverPwd').value;
+      if (pwd !== '2121') { showToast('❌ Senha incorreta'); return; }
+      document.getElementById('recoverAuth').style.display = 'none';
+      document.getElementById('recoverContent').style.display = '';
+      renderRecover();
+    }
+    function renderRecover() {
+      const delEmps = state.deletedEmployees || [];
+      const delEpis = state.deletedEpis || [];
+      const delEntregas = state.deletedEntregas || [];
+
+      document.getElementById('recoverEmps').innerHTML = delEmps.length
+        ? delEmps.map((e, i) => `
+    <div class="card static"><div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><div style="font-weight:600;">${esc(e.nome)}</div>
+      <div style="font-size:12px;color:var(--gray);">Mat: ${esc(e.matricula)} | Cargo: ${esc(e.cargo || '-')}</div></div>
+      <button class="btn btn-success small" onclick="restoreEmp(${i})">♻️ Restaurar</button>
+    </div></div>`).join('')
+        : '<p class="empty">Nenhum funcionário excluído</p>';
+
+      document.getElementById('recoverEpis').innerHTML = delEpis.length
+        ? delEpis.map((e, i) => `
+    <div class="card static"><div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><div style="font-weight:600;">${esc(e.nome)}</div>
+      <div style="font-size:12px;color:var(--gray);">CA: ${esc(e.ca)} | Válido: ${fmtDate(e.caVal) || '-'}</div></div>
+      <button class="btn btn-success small" onclick="restoreEpi(${i})">♻️ Restaurar</button>
+    </div></div>`).join('')
+        : '<p class="empty">Nenhum EPI excluído</p>';
+
+      document.getElementById('recoverEntregas').innerHTML = delEntregas.length
+        ? delEntregas.map((d, i) => `
+    <div class="card static"><div style="display:flex;justify-content:space-between;align-items:center;">
+      <div><div style="font-weight:600;">👤 ${esc(d.employeeName)}</div>
+      <div style="font-size:12px;color:var(--gray);">📅 ${fmtDateTime(d.data)} · ${(d.itens || []).length} item(s)</div></div>
+      <button class="btn btn-success small" onclick="restoreEntrega(${i})">♻️ Restaurar</button>
+    </div></div>`).join('')
+        : '<p class="empty">Nenhuma entrega excluída</p>';
+    }
+    function restoreEmp(i) {
+      const del = state.deletedEmployees;
+      if (!del || !del[i]) return;
+      const emp = del.splice(i, 1)[0];
+      state.employees.push(emp);
+      addPending('employee', 'upsert', { ...emp });
+      save();
+      recomputeCounters();
+      renderRecover();
+      showToast('✅ Funcionário restaurado: ' + emp.nome);
+    }
+    function restoreEpi(i) {
+      const del = state.deletedEpis;
+      if (!del || !del[i]) return;
+      const epi = del.splice(i, 1)[0];
+      state.epis.push(epi);
+      addPending('epi', 'upsert', { ...epi });
+      save();
+      recomputeCounters();
+      renderRecover();
+      showToast('✅ EPI restaurado: ' + epi.nome);
+    }
+    function restoreEntrega(i) {
+      const del = state.deletedEntregas;
+      if (!del || !del[i]) return;
+      const d = del.splice(i, 1)[0];
+      state.entregas.push(d);
+      addPending('entrega', 'upsert', { ...d });
+      save();
+      renderRecover();
+      showToast('✅ Entrega restaurada de ' + d.employeeName);
+    }
+
+    // ==================== RELATÓRIO CONSOLIDADO (Item 1) ====================
+    let _reportData = [];
+    function renderReport() {
+      const from = document.getElementById('reportFrom').value;
+      const to = document.getElementById('reportTo').value;
+      let list = [...state.entregas];
+      if (from) list = list.filter(d => d.data >= from);
+      if (to) list = list.filter(d => d.data <= to + 'T23:59:59');
+      _reportData = list;
+
+      const totalItens = list.reduce((a, d) => a + d.itens.reduce((b, i) => b + i.qty, 0), 0);
+      const totalEntregas = list.length;
+      const uniqueEmps = new Set(list.map(d => d.employeeId)).size;
+      const uniqueEpis = new Set(list.flatMap(d => d.itens.map(i => i.epiId))).size;
+
+      document.getElementById('reportSummary').innerHTML = `
+    <div class="card static" style="display:flex;justify-content:space-around;text-align:center;padding:14px;">
+      <div><b style="font-size:20px;color:var(--color-brand);">${totalEntregas}</b><div style="font-size:10px;color:var(--gray);">ENTREGAS</div></div>
+      <div><b style="font-size:20px;color:var(--color-brand);">${totalItens}</b><div style="font-size:10px;color:var(--gray);">ITENS</div></div>
+      <div><b style="font-size:20px;color:var(--color-brand);">${uniqueEmps}</b><div style="font-size:10px;color:var(--gray);">COLAB.</div></div>
+      <div><b style="font-size:20px;color:var(--color-brand);">${uniqueEpis}</b><div style="font-size:10px;color:var(--gray);">EPIs</div></div>
+    </div>`;
+
+      document.getElementById('reportList').innerHTML = list.length ? list.map(d => {
+        const total = d.itens.reduce((a, i) => a + i.qty, 0);
+        return `<div class="card static">
+      <div style="font-weight:600;font-size:13px;">👤 ${esc(d.employeeName)} <span class="badge badge-info">${esc(d.matricula)}</span></div>
+      <div style="font-size:11px;color:var(--gray);">📅 ${fmtDateTime(d.data)} · ${total} itens</div>
+      <div style="font-size:11px;color:var(--gray);">${d.itens.map(i => `${i.qty}x ${esc(i.nome)} (${esc(i.tam)})`).join(' · ')}</div>
+    </div>`;
+      }).join('') : '<p class="empty">Nenhuma entrega no período</p>';
+    }
+    function exportReportPDF() {
+      if (!_reportData.length) { showToast('⚠️ Nenhum dado para exportar'); return; }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const pw = 210, ml = 12;
+      doc.setFillColor(79, 70, 229); doc.rect(0, 0, pw, 18, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+      doc.text('RELATÓRIO CONSOLIDADO DE EPIs', pw / 2, 7, { align: 'center' });
+      doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+      const from = document.getElementById('reportFrom').value || 'Inicio';
+      const to = document.getElementById('reportTo').value || 'Fim';
+      doc.text('Período: ' + from + ' a ' + to + ' | Total: ' + _reportData.length + ' entregas', pw / 2, 13, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+      let y = 24;
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold');
+      doc.text('DATA', ml, y); doc.text('COLABORADOR', ml + 28, y); doc.text('MAT.', ml + 90, y); doc.text('ITENS', ml + 110, y); doc.text('EPIs ENTREGUES', ml + 125, y);
+      doc.line(ml, y + 1, pw - 12, y + 1); y += 5;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+      _reportData.forEach(d => {
+        if (y > 275) { doc.addPage(); y = 20; }
+        const itens = d.itens.map(i => i.qty + 'x ' + i.nome).join(', ');
+        doc.text(fmtDate(d.data), ml, y);
+        doc.text((d.employeeName || '').substring(0, 30), ml + 28, y);
+        doc.text(d.matricula || '-', ml + 90, y);
+        doc.text(String(d.itens.reduce((a, i) => a + i.qty, 0)), ml + 110, y);
+        const lines = doc.splitTextToSize(itens, 60);
+        doc.text(lines[0] || '-', ml + 125, y);
+        y += Math.max(4, lines.length * 3.5) + 1;
+      });
+      doc.save('Relatorio_EPI_' + from + '_' + to + '.pdf');
+      showToast('📄 Relatório exportado!');
+    }
+
+    // ==================== DEVOLUÇÃO DE EPI (Item 3) ====================
+    let _devEmp = null;
+    let _devItens = [];
+    function renderDevolution() {
+      document.getElementById('devEmpInfo').innerHTML = '';
+      document.getElementById('devEpiList').innerHTML = '';
+      document.getElementById('devForm').style.display = 'none';
+      _devEmp = null; _devItens = [];
+      const container = document.getElementById('devEpiList');
+      container.innerHTML = '<div class="search-box"><div class="search-bar"><input type="text" id="devSearch" placeholder="Buscar colaborador..." oninput="searchDevEmp(this.value)" autocomplete="off"><div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div></div><div class="glow"></div></div><div id="devResults"></div>';
+    }
+    function searchDevEmp(q) {
+      q = (q || '').toLowerCase();
+      const r = state.employees.filter(e => e.nome.toLowerCase().includes(q) || e.matricula.includes(q));
+      document.getElementById('devResults').innerHTML = r.map(e => {
+        const entregas = state.entregas.filter(d => d.employeeId === e.id);
+        const epiCount = entregas.reduce((a, d) => a + d.itens.length, 0);
+        return `<div class="card" onclick="selectDevEmp(${e.id})">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div><div style="font-weight:600;">${esc(e.nome)}</div>
+        <div style="font-size:11px;color:var(--gray);">Mat: ${esc(e.matricula)} · ${epiCount} EPIs</div></div>
+        <span class="badge badge-info">→</span>
+      </div>
+    </div>`;
+      }).join('') || '<p class="empty">Nenhum colaborador</p>';
+    }
+    function selectDevEmp(id) {
+      _devEmp = state.employees.find(e => e.id === id);
+      _devItens = [];
+      const entregas = state.entregas.filter(d => d.employeeId === id);
+      const agg = {};
+      entregas.forEach(d => {
+        d.itens.forEach(it => {
+          if (!agg[it.epiId]) agg[it.epiId] = { ...it, qty: 0 };
+          agg[it.epiId].qty += it.qty;
+        });
+      });
+      const epiList = Object.values(agg).filter(a => a.qty > 0);
+      document.getElementById('devEmpInfo').innerHTML = `
+    <div class="card static">
+      <div style="font-weight:600;">👤 ${esc(_devEmp.nome)}</div>
+      <div style="font-size:11px;color:var(--gray);">Mat: ${esc(_devEmp.matricula)}</div>
+    </div>`;
+      document.getElementById('devEpiList').innerHTML = epiList.length
+        ? epiList.map((it, i) => '<div class="card static" id="devItem' + i + '" onclick="toggleDevItem(' + i + ')" style="cursor:pointer;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+          + '<div><div style="font-weight:600;">' + it.qty + 'x ' + esc(it.nome) + '</div>'
+          + '<div style="font-size:11px;color:var(--gray);">CA: ' + esc(it.ca) + ' · Tam: ' + esc(it.tam) + '</div></div>'
+          + '<span class="badge" id="devBadge' + i + '">Selecionar</span>'
+          + '</div></div>').join('')
+        + '<button class="btn btn-success" id="btnDevConfirm" onclick="showDevForm()" disabled style="margin-top:8px;">📥 DEVOLVER SELECIONADOS</button>'
+        : '<p class="empty">Nenhum EPI para devolver</p>';
+      document.getElementById('devForm').style.display = 'none';
+      _devItens = epiList.map(() => false);
+    }
+    function toggleDevItem(i) {
+      _devItens[i] = !_devItens[i];
+      const el = document.getElementById('devItem' + i);
+      const badge = document.getElementById('devBadge' + i);
+      if (_devItens[i]) { el.style.borderColor = 'var(--color-success)'; el.style.background = '#f0fdf4'; badge.textContent = '✓ Selecionado'; badge.className = 'badge badge-ok'; }
+      else { el.style.borderColor = ''; el.style.background = ''; badge.textContent = 'Selecionar'; badge.className = 'badge'; }
+      document.getElementById('btnDevConfirm').disabled = !_devItens.some(x => x);
+    }
+    function showDevForm() {
+      if (!_devItens.some(x => x)) return;
+      document.getElementById('devForm').style.display = '';
+      document.querySelectorAll('#devReasonGroup .radio-option').forEach(o => o.onclick = () => { document.querySelectorAll('#devReasonGroup .radio-option').forEach(x => x.classList.remove('selected')); o.classList.add('selected'); o.querySelector('input').checked = true; });
+    }
+    function confirmDevolution() {
+      if (!_devEmp || !_devItens.some(x => x)) return;
+      const reason = document.querySelector('input[name="devReason"]:checked').value;
+      const obs = document.getElementById('devObs').value;
+      const agg = {};
+      state.entregas.filter(d => d.employeeId === _devEmp.id).forEach(d => {
+        d.itens.forEach(it => {
+          if (!agg[it.epiId]) agg[it.epiId] = { ...it, qty: 0, entregaIds: [] };
+          agg[it.epiId].qty += it.qty;
+          agg[it.epiId].entregaIds.push(d.id);
+        });
+      });
+      const epiList = Object.values(agg);
+      const selected = epiList.filter((_, i) => _devItens[i]);
+      selected.forEach(it => {
+        const epi = state.epis.find(x => x.id === it.epiId);
+        if (epi && epi.estoque && epi.estoque[it.tam] !== undefined) {
+          epi.estoque[it.tam] = (epi.estoque[it.tam] || 0) + it.qty;
+          epi.updatedAt = new Date().toISOString();
+        }
+      });
+      const devEntrega = {
+        id: 'DEV-' + Date.now(),
+        data: new Date().toISOString(),
+        employeeId: _devEmp.id,
+        employeeName: _devEmp.nome,
+        matricula: _devEmp.matricula,
+        cargo: _devEmp.cargo,
+        admissao: _devEmp.admissao,
+        itens: selected.map(it => ({ epiId: it.epiId, nome: it.nome, ca: it.ca, tam: it.tam, qty: it.qty, motivo: 'Devolução - ' + reason, obs })),
+        sig1: null, sig2: null, itemSigs: [],
+        tipo: 'devolucao',
+        motivo: reason
+      };
+      devEntrega.createdAt = new Date().toISOString();
+      devEntrega.updatedAt = new Date().toISOString();
+      state.entregas.push(devEntrega);
+      addPending('entrega', 'upsert', { ...devEntrega });
+      save();
+      showToast('✅ Devolução registrada: ' + selected.length + ' EPI(s)');
+      go('home');
+    }
+
+    // ==================== DASHBOARD COM GRÁFICOS (Item 6) ====================
+    function renderDashboard() {
+      const entregas = state.entregas;
+      const canvas = document.getElementById('chartCanvas');
+      const ctx = canvas.getContext('2d');
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr; canvas.height = 220 * dpr;
+      canvas.style.width = rect.width + 'px'; canvas.style.height = '220px';
+      ctx.scale(dpr, dpr);
+      const w = rect.width, h = 220;
+
+      const months = {};
+      entregas.forEach(d => {
+        const m = d.data ? d.data.substring(0, 7) : 'Sem data';
+        months[m] = (months[m] || 0) + d.itens.reduce((a, i) => a + i.qty, 0);
+      });
+      const labels = Object.keys(months).sort().slice(-6);
+      const values = labels.map(l => months[l]);
+      const maxVal = Math.max(...values, 1);
+
+      ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#334155'; ctx.font = 'bold 11px Inter, sans-serif';
+      ctx.fillText('Entregas por mês', 12, 20);
+
+      const chartTop = 32, chartBottom = h - 30, chartLeft = 36, chartRight = w - 12;
+      const barW = Math.min(36, (chartRight - chartLeft) / labels.length - 8);
+
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.5;
+      for (let i = 0; i <= 4; i++) {
+        const y = chartTop + (chartBottom - chartTop) * (1 - i / 4);
+        ctx.beginPath(); ctx.moveTo(chartLeft, y); ctx.lineTo(chartRight, y); ctx.stroke();
+        ctx.fillStyle = '#94a3b8'; ctx.font = '9px Inter, sans-serif';
+        ctx.fillText(String(Math.round(maxVal * i / 4)), 4, y + 3);
+      }
+
+      labels.forEach((l, i) => {
+        const x = chartLeft + i * ((chartRight - chartLeft) / labels.length) + ((chartRight - chartLeft) / labels.length - barW) / 2;
+        const barH = (values[i] / maxVal) * (chartBottom - chartTop);
+        const grad = ctx.createLinearGradient(x, chartBottom - barH, x, chartBottom);
+        grad.addColorStop(0, '#818cf8'); grad.addColorStop(1, '#6366f1');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x, chartBottom - barH, barW, barH, [4, 4, 0, 0]);
+        ctx.fill();
+        ctx.fillStyle = '#334155'; ctx.font = '8px Inter, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(l.substring(5), x + barW / 2, chartBottom + 12);
+        ctx.fillText(String(values[i]), x + barW / 2, chartBottom - barH - 4);
+      });
+      ctx.textAlign = 'start';
+
+      const epiAgg = {};
+      entregas.forEach(d => d.itens.forEach(it => { epiAgg[it.nome] = (epiAgg[it.nome] || 0) + it.qty; }));
+      const topEpis = Object.entries(epiAgg).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      document.getElementById('dashTopEpis').innerHTML = topEpis.length ? topEpis.map(function(item, i) {
+        return '<div class="item-row"><span style="font-weight:600;font-size:13px;">' + (i + 1) + '. ' + esc(item[0]) + '</span><span class="badge badge-info">' + item[1] + 'x</span></div>';
+      }).join('') : '<p class="empty">Sem dados</p>';
+
+      const empAgg = {};
+      entregas.forEach(function(d) { empAgg[d.employeeName] = (empAgg[d.employeeName] || 0) + d.itens.reduce(function(a, i) { return a + i.qty; }, 0); });
+      const topEmps = Object.entries(empAgg).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 5);
+      document.getElementById('dashTopEmps').innerHTML = topEmps.length ? topEmps.map(function(item, i) {
+        return '<div class="item-row"><span style="font-weight:600;font-size:13px;">' + (i + 1) + '. ' + esc(item[0]) + '</span><span class="badge badge-info">' + item[1] + ' EPIs</span></div>';
+      }).join('') : '<p class="empty">Sem dados</p>';
+    }
+
+    // ==================== MODO KIOSK (Item 8) ====================
+    let _kioskHistory = ['home'];
+    function toggleKiosk() {
+      document.documentElement.classList.toggle('kiosk');
+      const isKiosk = document.documentElement.classList.contains('kiosk');
+      showToast(isKiosk ? '🖥️ Modo Kiosk ativado (ESC para sair)' : '🖥️ Modo Kiosk desativado');
+      updateKioskUI();
+    }
+    function kioskGoBack() {
+      if (_kioskHistory.length > 1) { _kioskHistory.pop(); go(_kioskHistory[_kioskHistory.length - 1]); }
+      else { go('home'); }
+    }
+    function updateKioskUI() {
+      const isKiosk = document.documentElement.classList.contains('kiosk');
+      const backBtn = document.getElementById('kioskBack');
+      if (backBtn) backBtn.classList.toggle('kiosk-home', curScreen === 'home');
+      const navMap = { home: 'kn-home', history: 'kn-history', employees: 'kn-employees', epis: 'kn-epis' };
+      document.querySelectorAll('.kiosk-nav button').forEach(b => b.classList.remove('active'));
+      const active = document.getElementById(navMap[curScreen]);
+      if (active) active.classList.add('active');
+    }
+
+    // ==================== MIGRAÇÃO EXCEL (Item 11) ====================
+    function importExcel(ev) {
+      const f = ev.target.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          if (typeof XLSX === 'undefined') {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.onload = () => processExcel(e.target.result, f.name);
+            document.head.appendChild(script);
+          } else { processExcel(e.target.result, f.name); }
+        } catch (err) { showToast('❌ Erro ao ler planilha'); }
+      };
+      reader.readAsArrayBuffer(f);
+      ev.target.value = '';
+    }
+    function processExcel(data, filename) {
+      const wb = XLSX.read(data, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws);
+      if (!rows.length) { showToast('⚠️ Planilha vazia'); return; }
+      let imported = 0;
+      rows.forEach(r => {
+        const nome = r['NOME'] || r['nome'] || r['Nome'] || r['COLABORADOR'] || '';
+        const matricula = String(r['MATRICULA'] || r['matricula'] || r['Matrícula'] || r['MAT'] || '');
+        if (!nome || !matricula) return;
+        const exists = state.employees.find(e => e.matricula === matricula);
+        if (!exists) {
+          state.employees.push({ id: counters.emp++, nome: nome.toUpperCase().trim(), matricula, cargo: r['CARGO'] || r['cargo'] || 'Operacional', admissao: r['ADMISSAO'] || r['admissao'] || '', telefone: r['TELEFONE'] || r['telefone'] || '' });
+          imported++;
+        }
+      });
+      if (imported > 0) { save(); recomputeCounters(); showToast('✅ ' + imported + ' colaborador(es) importado(s) de ' + filename); }
+      else showToast('⚠️ Nenhum novo colaborador encontrado na planilha');
     }
 
     // ==================== QR CODE / FICHA DO COLABORADOR ====================
@@ -770,7 +1278,7 @@
       document.getElementById('qrName').textContent = e.nome;
       document.getElementById('qrMat').textContent = 'Mat: ' + e.matricula;
       const inp = document.getElementById('qrUrl'); inp.value = url;
-      inp.onclick = function () { this.select(); try { document.execCommand('copy'); } catch (err) { } showToast('🔗 Link copiado'); };
+      inp.onclick = function () { this.select(); try { document.execCommand('copy'); } catch (err) { } this.style.borderColor = 'var(--color-success)'; this.style.background = '#f0fdf4'; showToast('🔗 Link copiado!'); setTimeout(() => { this.style.borderColor = ''; this.style.background = ''; }, 1500); };
       const wrap = document.getElementById('qrBox'); wrap.innerHTML = '';
       try { new QRCode(wrap, { text: url, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.H }); }
       catch (err) { wrap.innerHTML = '<p class="empty">Falha ao gerar QR (sem internet).<br>Link: ' + esc(url) + '</p>'; }
@@ -818,7 +1326,12 @@
       try { id = parseInt(new URL(text).searchParams.get('emp') || '0', 10); } catch (err) { }
       if (!id) { id = parseInt(text, 10) || 0; }
       const e = state.employees.find(x => x.id === id);
-      if (e) { state.cur.emp = e; state.cart = []; go('empview'); showToast('✅ ' + e.nome); }
+      if (e) {
+        state.cur.emp = e;
+        state.cart = [];
+        go('empview');
+        showToast('✅ ' + e.nome);
+      }
       else if (id && USE_API) { state.cur.emp = { id, nome: 'Carregando...', matricula: '' }; state.cart = []; go('empview'); syncEmpPublic(id); }
       else showToast('❌ Colaborador não encontrado no QR');
     }
@@ -933,16 +1446,17 @@
       function drawTableHeader(y) {
         const headerH = 10;
         const cols = [
-          { label: 'QT.', x: ml, w: 8 },
-          { label: 'DESCRIÇÃO DO EQUIPAMENTO', x: ml + 8, w: 58 },
-          { label: 'Nº C.A', x: ml + 66, w: 18 },
-          { label: 'QTD', x: ml + 84, w: 10 },
-          { label: 'DATA DE\nRECEBIMENTO', x: ml + 94, w: 22 },
-          { label: 'ASSINATURA\nDO FUNCIONÁRIO', x: ml + 116, w: 28 },
-          { label: 'DATA DE\nDEVOLUÇÃO', x: ml + 144, w: 20 },
-          { label: 'QTD', x: ml + 164, w: 10 },
-          { label: 'MOTIVO\nSUBSTITUIÇÃO', x: ml + 174, w: 16 },
-          { label: 'Obs.', x: ml + 190, w: 8 }
+          { label: 'QT.', x: ml, w: 7 },
+          { label: 'DESCRIÇÃO DO EQUIPAMENTO', x: ml + 7, w: 51 },
+          { label: 'Nº C.A', x: ml + 58, w: 15 },
+          { label: 'QTD', x: ml + 73, w: 8 },
+          { label: 'TAM.', x: ml + 81, w: 12 },
+          { label: 'DATA DE\nRECEBIMENTO', x: ml + 93, w: 20 },
+          { label: 'ASSINATURA\nDO FUNCIONÁRIO', x: ml + 113, w: 27 },
+          { label: 'DATA DE\nDEVOLUÇÃO', x: ml + 140, w: 18 },
+          { label: 'QTD', x: ml + 158, w: 8 },
+          { label: 'MOTIVO\nSUBSTITUIÇÃO', x: ml + 166, w: 18 },
+          { label: 'Obs.', x: ml + 184, w: 10 }
         ];
         doc.setTextColor(0, 0, 0);
         doc.setDrawColor(0, 0, 0);
@@ -960,28 +1474,25 @@
       function drawTableRows(y, cols, items) {
         const rowH = 7;
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+        const itemSigs = d.itemSigs || (Array.isArray(d.sig1) ? d.sig1 : []);
         items.forEach((it, idx) => {
           if (y + rowH > ph - 30) { doc.addPage(); drawPageHeader(2, 2); y = 28; const h = drawTableHeader(y); y = h.y; }
-          doc.rect(cols[0].x, y, cols[0].w, rowH);
-          doc.rect(cols[1].x, y, cols[1].w, rowH);
-          doc.rect(cols[2].x, y, cols[2].w, rowH);
-          doc.rect(cols[3].x, y, cols[3].w, rowH);
-          doc.rect(cols[4].x, y, cols[4].w, rowH);
-          doc.rect(cols[5].x, y, cols[5].w, rowH);
-          doc.rect(cols[6].x, y, cols[6].w, rowH);
-          doc.rect(cols[7].x, y, cols[7].w, rowH);
-          doc.rect(cols[8].x, y, cols[8].w, rowH);
-          doc.rect(cols[9].x, y, cols[9].w, rowH);
-          doc.text(String(idx + 1), cols[0].x + 2.5, y + 5);
+          for (let c = 0; c < cols.length; c++) doc.rect(cols[c].x, y, cols[c].w, rowH);
+          doc.text(String(idx + 1), cols[0].x + 1.5, y + 5);
           doc.text(it.nome || '-', cols[1].x + 1, y + 5);
           doc.text(it.ca || '-', cols[2].x + 1, y + 5);
-          doc.text(String(it.qty || ''), cols[3].x + 2, y + 5);
-          doc.text(fmtDate(d.data), cols[4].x + 1, y + 5);
-          doc.text('-', cols[5].x + 8, y + 5);
-          doc.text('-', cols[6].x + 6, y + 5);
-          doc.text('-', cols[7].x + 2, y + 5);
-          doc.text(it.motivo || '-', cols[8].x + 1, y + 5);
-          doc.text(it.tam || '-', cols[9].x + 1, y + 5);
+          doc.text(String(it.qty || ''), cols[3].x + 1.5, y + 5);
+          doc.text(it.tam || '-', cols[4].x + 1, y + 5);
+          doc.text(fmtDate(it.dataReceb || d.data), cols[5].x + 1, y + 5);
+          if (itemSigs[idx]) {
+            try { doc.addImage(itemSigs[idx], 'PNG', cols[6].x + 1, y + 0.5, cols[6].w - 2, rowH - 1); } catch (err) { doc.text('-', cols[6].x + 8, y + 5); }
+          } else {
+            doc.text('-', cols[6].x + 8, y + 5);
+          }
+          doc.text('-', cols[7].x + 6, y + 5);
+          doc.text('-', cols[8].x + 1.5, y + 5);
+          doc.text(it.motivo || '-', cols[9].x + 1, y + 5);
+          doc.text(it.obs || '-', cols[10].x + 1, y + 5);
           y += rowH;
         });
         // Fill remaining empty rows
@@ -989,32 +1500,34 @@
         for (let i = 0; i < remaining; i++) {
           if (y + rowH > ph - 30) break;
           cols.forEach(c => doc.rect(c.x, y, c.w, rowH));
-          doc.text(String(items.length + i + 1), cols[0].x + 2.5, y + 5);
+          doc.text(String(items.length + i + 1), cols[0].x + 1.5, y + 5);
           y += rowH;
         }
         return y;
       }
 
       function drawSignatures(y) {
-        // Colaborador
+        const hasItemSigs = d.itemSigs && d.itemSigs.length > 0;
+        const hasLegacySig1 = d.sig1 && typeof d.sig1 === 'string';
+
+        if (hasLegacySig1 && !hasItemSigs) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+          doc.text('Assinatura do Colaborador:', ml, y);
+          try { doc.addImage(d.sig1, 'PNG', ml, y + 2, 50, 15); } catch (err) { }
+          doc.line(ml, y + 20, ml + 70, y + 20);
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
+          doc.text(e.employeeName || '', ml, y + 24);
+          y += 30;
+        }
+
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-        doc.text('Assinatura do Colaborador:', ml, y);
-        if (d.sig1) { try { doc.addImage(d.sig1, 'PNG', ml, y + 2, 50, 15); } catch (err) { } }
+        doc.text('Assinatura do Responsável pela Entrega (SESMT):', ml, y);
+        if (d.sig2) { try { doc.addImage(d.sig2, 'PNG', ml, y + 2, 50, 15); } catch (err) { } }
         doc.line(ml, y + 20, ml + 70, y + 20);
         doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
-        doc.text(e.employeeName || '', ml, y + 24);
+        doc.text('Responsável', ml, y + 24);
 
-        // SESMT
-        const y2 = y + 30;
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
-        doc.text('Assinatura do Responsável pela Entrega (SESMT):', ml, y2);
-        if (d.sig2) { try { doc.addImage(d.sig2, 'PNG', ml, y2 + 2, 50, 15); } catch (err) { } }
-        doc.line(ml, y2 + 20, ml + 70, y2 + 20);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7);
-        doc.text('Responsável', ml, y2 + 24);
-
-        // Local e Data
-        const y3 = y2 + 32;
+        const y3 = y + 32;
         doc.setFont('helvetica', 'bold'); doc.setFontSize(7);
         doc.text('Local: ', ml, y3);
         doc.setFont('helvetica', 'normal'); doc.text('Parauapebas, PA', ml + 14, y3);
@@ -1077,4 +1590,10 @@
         }
       }
     })();
-  
+
+    // ESC para sair do modo kiosk (Item 8)
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && document.documentElement.classList.contains('kiosk')) {
+        toggleKiosk();
+      }
+    });

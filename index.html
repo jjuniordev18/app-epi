@@ -33,36 +33,100 @@
       </div>
       <div class="hdr-btns">
         <span id="syncBadge" class="sync-badge" title="Status de sincronização"></span>
-        <button class="icon-btn" onclick="toggleDark()" title="Tema">🌙</button>
+        <button class="icon-btn" onclick="toggleDark()" title="Tema" id="themeBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
       </div>
     </div>
 
     <!-- HOME -->
     <div class="screen active" id="home">
       <div class="stat-grid">
-        <div class="stat" onclick="go('history')"><b id="stToday">0</b><span>Entregas hoje</span></div>
-        <div class="stat" onclick="go('history')"><b id="stTotal">0</b><span>Total entregas</span></div>
-        <div class="stat" onclick="go('employees')"><b id="stEmp">0</b><span>Funcionários</span></div>
-        <div class="stat" onclick="go('epis')"><b id="stEpi">0</b><span>EPIs cadastrados</span></div>
+        <div class="flip-card" onclick="go('history')">
+          <div class="flip-card-inner">
+            <div class="flip-card-front">
+              <b class="flip-num" id="stToday">0</b>
+              <span class="flip-label">Entregas hoje</span>
+            </div>
+            <div class="flip-card-back">
+              <span class="flip-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+              <span class="flip-label">Entregas hoje</span>
+            </div>
+          </div>
+        </div>
+        <div class="flip-card tint-green" onclick="go('history')">
+          <div class="flip-card-inner">
+            <div class="flip-card-front">
+              <b class="flip-num" id="stTotal">0</b>
+              <span class="flip-label">Total entregas</span>
+            </div>
+            <div class="flip-card-back">
+              <span class="flip-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+              <span class="flip-label">Total entregas</span>
+            </div>
+          </div>
+        </div>
+        <div class="flip-card tint-blue" onclick="go('employees')">
+          <div class="flip-card-inner">
+            <div class="flip-card-front">
+              <b class="flip-num" id="stEmp">0</b>
+              <span class="flip-label">Funcionários</span>
+            </div>
+            <div class="flip-card-back">
+              <span class="flip-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+              <span class="flip-label">Funcionários</span>
+            </div>
+          </div>
+        </div>
+        <div class="flip-card tint-purple" onclick="go('epis')">
+          <div class="flip-card-inner">
+            <div class="flip-card-front">
+              <b class="flip-num" id="stEpi">0</b>
+              <span class="flip-label">EPIs cadastrados</span>
+            </div>
+            <div class="flip-card-back">
+              <span class="flip-icon"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+              <span class="flip-label">EPIs cadastrados</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div id="homeAlerts"></div>
-      <div class="section-title">Ações</div>
-      <button class="btn btn-primary" onclick="go('search')">🔍 NOVA ENTREGA</button>
-      <button class="btn btn-success" onclick="go('delivered')">📦 EPIs entregues</button>
-      <button class="btn btn-secondary" onclick="startScan()">🔳 Ler QR Code</button>
-      <button class="btn btn-secondary" onclick="exportData()">📤 Exportar backup (JSON)</button>
-      <button class="btn btn-secondary" onclick="document.getElementById('fileBackup').click()">📥 Importar
+      <div class="section-btn">
+        <span class="btn-letter">A</span><span class="btn-letter">Ç</span><span class="btn-letter">Õ</span><span class="btn-letter">E</span><span class="btn-letter">S</span>
+      </div>
+      <button class="box-btn tint-indigo" onclick="go('search')">🔍 NOVA ENTREGA</button>
+      <button class="box-btn tint-green" onclick="go('delivered')">📦 EPIs entregues</button>
+      <button class="box-btn tint-slate" onclick="startScan()">🔳 Ler QR Code</button>
+      <button class="box-btn tint-amber" onclick="exportData()">📤 Exportar backup (JSON)</button>
+      <button class="box-btn tint-blue" onclick="document.getElementById('fileBackup').click()">📥 Importar
         backup</button>
       <input type="file" id="fileBackup" accept=".json,application/json" style="display:none"
         onchange="importData(event)">
+      <button class="box-btn tint-amber" onclick="go('recover')">♻️ Itens Excluídos</button>
+      <div class="section-btn">
+        <span class="btn-letter">R</span><span class="btn-letter">E</span><span class="btn-letter">L</span><span class="btn-letter">A</span><span class="btn-letter">T</span><span class="btn-letter">Ó</span><span class="btn-letter">R</span><span class="btn-letter">I</span><span class="btn-letter">O</span><span class="btn-letter">S</span>
+      </div>
+      <button class="box-btn tint-purple" onclick="go('report')">📊 Relatório Consolidado</button>
+      <button class="box-btn tint-indigo" onclick="go('dashboard')">📈 Dashboard</button>
+      <div class="section-btn">
+        <span class="btn-letter">O</span><span class="btn-letter">P</span><span class="btn-letter">E</span><span class="btn-letter">R</span><span class="btn-letter">A</span><span class="btn-letter">Ç</span><span class="btn-letter">Õ</span><span class="btn-letter">E</span><span class="btn-letter">S</span>
+      </div>
+      <button class="box-btn tint-amber" onclick="go('devolution')">📥 Devolução de EPI</button>
+      <button class="box-btn tint-slate" onclick="toggleKiosk()">🖥️ Modo Kiosk</button>
+      <button class="box-btn tint-teal" onclick="document.getElementById('fileExcel').click()">📋 Importar planilha</button>
+      <input type="file" id="fileExcel" accept=".xlsx,.xls,.csv" style="display:none" onchange="importExcel(event)">
     </div>
 
     <!-- SEARCH -->
     <div class="screen" id="search">
       <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
       <h2 style="margin:14px 0;">Identificar Colaborador</h2>
-      <input type="text" id="searchInput" placeholder="🔍 Nome, matrícula ou telefone..."
-        oninput="renderSearch(this.value)" autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="Nome, matrícula ou telefone..." oninput="renderSearch(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="searchResults"></div>
     </div>
 
@@ -93,7 +157,13 @@
     <div class="screen" id="selectepi">
       <button class="btn btn-secondary small" onclick="go('employee')">← Voltar</button>
       <h2 style="margin:14px 0;">Selecionar EPI</h2>
-      <input type="text" id="epiSearch" placeholder="🔍 Buscar..." oninput="renderEPIs(this.value)" autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" id="epiSearch" placeholder="Buscar..." oninput="renderEPIs(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="epiList"></div>
     </div>
 
@@ -126,14 +196,15 @@
 
     <!-- SIGNATURE -->
     <div class="screen" id="signature">
-      <button class="btn btn-secondary small" onclick="go('employee')">← Voltar</button>
+      <button class="btn btn-secondary small" onclick="confirmLeaveSig()">← Voltar</button>
       <h2 style="margin:14px 0;">Confirmar Entrega</h2>
+      <div class="card static" style="margin-bottom:10px;">
+        <label for="deliveryDate" style="font-weight:600;font-size:13px;">📅 Data da Entrega</label>
+        <input type="date" id="deliveryDate" style="margin-top:4px;">
+        <div style="font-size:11px;color:var(--gray);margin-top:2px;">Altere para registrar data retroativa se necessário.</div>
+      </div>
       <div id="sigSummary"></div>
-      <div class="section-title">Assinatura do Colaborador</div>
-      <canvas id="signatureCanvas"></canvas>
-      <input type="text" id="sigText1" placeholder="Ou digite seu nome aqui..." oninput="renderSigText(1)"
-        style="margin:6px 0;font-family:'Brush Script MT','Segoe Script',cursive;font-size:20px;">
-      <button class="btn btn-secondary small" onclick="clearSigN(1)">🗑 Limpar</button>
+      <div id="itemSigsContainer"></div>
       <div class="section-title">Assinatura do Responsável pela Entrega (SESMT)</div>
       <canvas id="signatureCanvas2"></canvas>
       <input type="text" id="sigText2" placeholder="Ou digite seu nome aqui..." oninput="renderSigText(2)"
@@ -159,7 +230,13 @@
     <div class="screen" id="history">
       <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
       <h2 style="margin:14px 0;">📋 Histórico de Entregas</h2>
-      <input type="text" placeholder="🔍 Filtrar por nome..." oninput="renderHistory(this.value)" autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" placeholder="Filtrar por nome..." oninput="renderHistory(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="histList"></div>
     </div>
 
@@ -167,7 +244,13 @@
     <div class="screen" id="delivered">
       <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
       <h2 style="margin:14px 0;">📦 EPIs Entregues</h2>
-      <input type="text" placeholder="🔍 Buscar EPI..." oninput="renderDelivered(this.value)" autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" placeholder="Buscar EPI..." oninput="renderDelivered(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="deliveredList"></div>
     </div>
 
@@ -176,8 +259,13 @@
       <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
       <h2 style="margin:14px 0;">Funcionários</h2>
       <button class="btn btn-success" onclick="clearEmpForm();go('addemp')">➕ Novo</button>
-      <input type="text" id="empMgmtSearch" placeholder="🔍 Buscar..." oninput="renderEmps(this.value)"
-        autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" id="empMgmtSearch" placeholder="Buscar..." oninput="renderEmps(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="empMgmt"></div>
     </div>
 
@@ -201,8 +289,13 @@
       <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
       <h2 style="margin:14px 0;">EPIs</h2>
       <button class="btn btn-success" onclick="clearEpiForm();go('addepi')">➕ Novo</button>
-      <input type="text" id="epiMgmtSearch" placeholder="🔍 Buscar..." oninput="renderEpiMgmt(this.value)"
-        autocomplete="off">
+      <div class="search-box">
+        <div class="search-bar">
+          <input type="text" id="epiMgmtSearch" placeholder="Buscar..." oninput="renderEpiMgmt(this.value)" autocomplete="off">
+          <div class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+        </div>
+        <div class="glow"></div>
+      </div>
       <div id="epiMgmt"></div>
     </div>
 
@@ -220,9 +313,83 @@
       <input type="text" id="eEstoque" placeholder="Ex: P=5, M=10, G=8">
       <input type="number" id="eRenov" min="0" placeholder="Validade de uso (dias) — p/ sugerir troca por vencimento"
         title="Após quantos dias de uso sugerir a troca deste EPI por vencimento (opcional)">
+      <input type="number" id="eEstoqueMin" min="0" placeholder="Estoque mínimo (alerta quando atingir)"
+        title="Alertar quando o estoque total deste EPI atingir este valor (opcional)">
       <button class="btn btn-primary" onclick="saveEpi()">💾 SALVAR</button>
     </div>
-  </div>
+
+    <!-- RECOVER -->
+    <div class="screen" id="recover">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">♻️ Itens Excluídos</h2>
+      <div id="recoverAuth">
+        <div class="card static" style="text-align:center;">
+          <p style="font-size:13px;color:var(--gray);">Digite a senha de administrador para acessar os itens excluídos.</p>
+          <input type="password" id="recoverPwd" placeholder="Senha" style="text-align:center;max-width:200px;">
+          <button class="btn btn-primary" onclick="authRecover()" style="margin-top:8px;">Entrar</button>
+        </div>
+      </div>
+      <div id="recoverContent" style="display:none;">
+        <div class="section-title">Funcionários Excluídos</div>
+        <div id="recoverEmps"></div>
+        <div class="section-title">EPIs Excluídos</div>
+        <div id="recoverEpis"></div>
+        <div class="section-title">Entregas Excluídas</div>
+        <div id="recoverEntregas"></div>
+      </div>
+    </div>
+
+    <!-- REPORT -->
+    <div class="screen" id="report">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">📊 Relatório Consolidado</h2>
+      <div class="card static">
+        <div class="section-title" style="margin-top:0;">Filtrar por período</div>
+        <div style="display:flex;gap:8px;">
+          <input type="date" id="reportFrom" style="flex:1;">
+          <input type="date" id="reportTo" style="flex:1;">
+        </div>
+        <button class="btn btn-primary" onclick="renderReport()" style="margin-top:8px;">🔍 Filtrar</button>
+        <button class="btn btn-secondary" onclick="exportReportPDF()" style="margin-top:4px;">📄 Exportar PDF</button>
+      </div>
+      <div id="reportSummary"></div>
+      <div id="reportList"></div>
+    </div>
+
+    <!-- DEVOLUTION -->
+    <div class="screen" id="devolution">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">📥 Devolução de EPI</h2>
+      <div id="devEmpInfo"></div>
+      <div class="section-title">EPIs com entrega ativa</div>
+      <div id="devEpiList"></div>
+      <div id="devForm" style="display:none;">
+        <div class="section-title">Motivo da devolução</div>
+        <div id="devReasonGroup">
+          <label class="radio-option"><input type="radio" name="devReason" value="Desligamento" checked> Desligamento</label>
+          <label class="radio-option"><input type="radio" name="devReason" value="Troca"> Troca</label>
+          <label class="radio-option"><input type="radio" name="devReason" value="Danificado"> Danificado</label>
+          <label class="radio-option"><input type="radio" name="devReason" value="Perda"> Perda</label>
+        </div>
+        <textarea id="devObs" placeholder="Observação (opcional)..." rows="2"></textarea>
+        <button class="btn btn-success" onclick="confirmDevolution()">✓ CONFIRMAR DEVOLUÇÃO</button>
+      </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div class="screen" id="dashboard">
+      <button class="btn btn-secondary small" onclick="go('home')">← Voltar</button>
+      <h2 style="margin:14px 0;">📈 Dashboard</h2>
+      <div class="card static" style="padding:16px;">
+        <canvas id="chartCanvas" style="width:100%;height:220px;"></canvas>
+      </div>
+      <div class="section-title">EPIs mais entregues</div>
+      <div id="dashTopEpis"></div>
+      <div class="section-title">Colaboradores com mais EPIs</div>
+      <div id="dashTopEmps"></div>
+    </div>
+
+    <!-- KIOSK (modificado via CSS) -->
 
   <div class="modal-overlay" id="scanModal">
     <div class="modal" style="text-align:center;">
@@ -235,15 +402,35 @@
     </div>
   </div>
 
+  <button class="kiosk-back" id="kioskBack" onclick="kioskGoBack()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+  <button class="kiosk-theme-toggle" id="kioskThemeBtn" onclick="toggleDark()" title="Alternar tema"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+  <div class="kiosk-nav" id="kioskNav">
+    <button onclick="go('home')" id="kn-home"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span>Início</span></button>
+    <button onclick="go('history')" id="kn-history"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Entregas</span></button>
+    <button onclick="go('employees')" id="kn-employees"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Funcionários</span></button>
+    <button onclick="go('epis')" id="kn-epis"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg><span>EPIs</span></button>
+  </div>
   <div class="toast" id="toast"></div>
 
   <nav class="bottom-nav">
-    <button class="nav-item active" id="nv-home" onclick="go('home')"><span>🏠</span><span>Início</span></button>
-    <button class="nav-item" id="nv-history" onclick="go('history')"><span>📋</span><span>Entregas</span></button>
-    <button class="nav-item" id="nv-employees"
-      onclick="go('employees')"><span>👥</span><span>Funcionários</span></button>
-    <button class="nav-item" id="nv-epis" onclick="go('epis')"><span>🦺</span><span>EPIs</span></button>
+    <button class="nav-item nav-item-press" id="nv-home" onclick="go('home')">
+      <span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+      <span>Início</span>
+    </button>
+    <button class="nav-item nav-item-press" id="nv-history" onclick="go('history')">
+      <span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+      <span>Entregas</span>
+    </button>
+    <button class="nav-item nav-item-press" id="nv-employees" onclick="go('employees')">
+      <span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      <span>Funcionários</span>
+    </button>
+    <button class="nav-item nav-item-press" id="nv-epis" onclick="go('epis')">
+      <span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+      <span>EPIs</span>
+    </button>
   </nav>
+  </div>
 
   <div class="modal-overlay" id="qrModal" onclick="if(event.target===this)closeQR()">
     <div class="modal">

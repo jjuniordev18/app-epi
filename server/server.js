@@ -46,9 +46,18 @@ app.use((err, req, res, _next) => {
   else res.status(500).json({ error: 'Erro interno' });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  let lanIP = 'localhost';
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) { lanIP = net.address; break; }
+    }
+  }
   console.log('==============================================');
   console.log('  App EPI · servidor rodando');
-  console.log('  Acesso: http://localhost:' + PORT);
+  console.log('  Local:   http://localhost:' + PORT);
+  console.log('  Rede:    http://' + lanIP + ':' + PORT);
   console.log('==============================================');
 });

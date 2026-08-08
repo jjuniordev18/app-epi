@@ -1,4 +1,4 @@
-const CACHE = 'safeguard-epi-v1';
+const CACHE = 'safeguard-epi-v2';
 const STATICS = [
   './',
   './index.html',
@@ -32,20 +32,19 @@ self.addEventListener('fetch', e => {
 
   if (e.request.method !== 'GET') return;
 
-  // Nunca cachear chamadas a APIs externas (Firebase, CDNs)
   if (url.origin !== self.location.origin) return;
 
   e.respondWith(
     caches.match(e.request).then(cached => {
-      return cached || fetch(e.request).then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, copy));
-        return res;
-      }).catch(() => {
-        if (e.request.destination === 'document') {
-          return caches.match('./index.html');
+      const fetchPromise = fetch(e.request).then(res => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
         }
-      });
+        return res;
+      }).catch(() => cached);
+
+      return cached || fetchPromise;
     })
   );
 });
