@@ -1324,8 +1324,8 @@
 
     // ==================== QR CODE / FICHA DO COLABORADOR ====================
     function empQRUrl(e) {
-      const base = location.href.split('#')[0].split('?')[0];
-      return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'emp=' + e.id;
+      const base = location.href.split('#')[0].split('?')[0].replace(/index\.html$/, '').replace(/\/$/, '/');
+      return base + 'ficha.html?emp=' + e.id;
     }
     function openQR(id) {
       const e = state.employees.find(x => x.id === id);

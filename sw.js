@@ -5,6 +5,7 @@ const STATICS = [
   './index.html',
   './app.js',
   './styles.css',
+  './ficha.html',
   './logo.png',
   './manifest.webmanifest',
   './firebase-config.js'
